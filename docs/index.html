@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Laminator — from the surface to the source</title>
-<meta name="description" content="Click the element that looks wrong. Laminator hands your coding agent the file and line that paints it. Runs entirely on your machine, with zero dependencies.">
-<meta property="og:title" content="Laminator — from the surface to the source">
-<meta property="og:description" content="Click the element that looks wrong. Your agent gets the file and the line number.">
+<title>Laminator — click the element, get the line of code</title>
+<meta name="description" content="Something looks wrong on the page. Click it, say what's up, and your coding agent gets the file and line that made it. Runs on your own machine.">
+<meta property="og:title" content="Laminator — click the element, get the line of code">
+<meta property="og:description" content="Click the thing that looks wrong. Your agent gets the file and the line.">
 <meta property="og:image" content="assets/app-icon-512.png">
 <meta name="theme-color" content="#16181D">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
@@ -15,13 +15,20 @@
 <style>
 /* ═══════════════════════════════════════════════════════════════════════
    Brand tokens. Palette from the kit: #2F6DF6 primary, #93B4FC layer,
-   #16181D ink, #FFFFFF paper. Light first; dark redefines the same names,
-   so nothing is ever declared only inside a media query.
+   #16181D ink. Light first; dark redefines the same names, so nothing is
+   ever declared only inside a media query.
+
+   The dark ramp is deliberately spaced apart. An earlier version put paper,
+   card, wash and hair within a few points of each other and everything with
+   a border or a soft fill — chips, key caps, ghost buttons — disappeared.
    ═══════════════════════════════════════════════════════════════════════ */
 :root{
   --brand:#2F6DF6; --layer:#93B4FC; --ink:#16181D; --paper:#fff;
-  --body:#565d6d; --soft:#8a91a1; --hair:#e8eaef; --wash:#f5f6f8;
+  --body:#565d6d; --soft:#7c8494; --hair:#e5e8ee; --wash:#f4f6f9;
   --card:#fff; --deep:#0f1116; --dot:rgba(22,24,29,.09);
+  --chip:#eef1f6; --chip-ink:#4a5262;
+  /* A frame needs a stronger edge than a divider does. */
+  --edge:#d6dbe4; --chrome:#eceff4;
   --glow:radial-gradient(60% 55% at 50% 0%, rgba(47,109,246,.13), transparent 70%);
   --shell:rgba(255,255,255,.75);
   --sans:"Geist",-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Inter,system-ui,sans-serif;
@@ -33,7 +40,7 @@
   /* transitions.dev — tabs sliding (16) */
   --tabs-dur:250ms; --tabs-ease:cubic-bezier(0.22, 1, 0.36, 1);
   --tabs-text-muted:rgba(86,93,109,.85); --tabs-text-active:#16181D;
-  --tabs-bar-bg:#eef0f4; --tabs-pill-bg:#fff;
+  --tabs-bar-bg:#eaedf3; --tabs-pill-bg:#fff;
   /* transitions.dev — accordion (21) */
   --acc-expand:250ms; --acc-collapse:250ms; --acc-chevron:250ms;
   --acc-ease:cubic-bezier(0.22, 1, 0.36, 1);
@@ -49,23 +56,29 @@
 }
 @media (prefers-color-scheme:dark){
   :root{
-    --ink:#f1f3f8; --paper:#0b0d11; --body:#9aa1b1; --soft:#6b7282;
-    --hair:#1c1f27; --wash:#101319; --card:#12151b; --deep:#07090c;
-    --dot:rgba(255,255,255,.07);
-    --glow:radial-gradient(60% 55% at 50% 0%, rgba(47,109,246,.2), transparent 70%);
-    --shell:rgba(11,13,17,.72);
-    --tabs-text-muted:rgba(154,161,177,.85); --tabs-text-active:#f1f3f8;
-    --tabs-bar-bg:#171b22; --tabs-pill-bg:#262c36;
+    --ink:#f2f4f9; --paper:#0a0c10; --body:#a7aebe; --soft:#828a9a;
+    --hair:#2a2f3a; --wash:#171b23; --card:#14181f; --deep:#080a0e;
+    /* --chip has to clear --chrome AND --card, since it sits on both. At
+       #232833 it was 0.0068 of luminance from the title bar, which is below
+       where a flat fill still reads as a shape. */
+    --chip:#2f3643; --chip-ink:#c4cbd9;
+    --edge:#333a47; --chrome:#1b202a;
+    --dot:rgba(255,255,255,.08);
+    --glow:radial-gradient(60% 55% at 50% 0%, rgba(47,109,246,.22), transparent 70%);
+    --shell:rgba(10,12,16,.72);
+    --tabs-text-muted:rgba(167,174,190,.9); --tabs-text-active:#f2f4f9;
+    --tabs-bar-bg:#1c212a; --tabs-pill-bg:#333a47;
   }
 }
 
 *{box-sizing:border-box}
 html{scroll-behavior:smooth;scroll-padding-top:88px;-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16.5px;
-  line-height:1.6;letter-spacing:-.011em;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  line-height:1.62;letter-spacing:-.011em;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 a{color:inherit;text-decoration:none}
 img,svg{max-width:100%;display:block}
-::selection{background:rgba(47,109,246,.22)}
+::selection{background:rgba(47,109,246,.24)}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:6px}
 
 /* ── Nav ─────────────────────────────────────────────────────────────── */
 header{position:sticky;top:0;z-index:60;background:var(--shell);
@@ -79,43 +92,28 @@ header.stuck{border-bottom-color:var(--hair)}
 @media (prefers-color-scheme:dark){ .logo .on-light{display:none} .logo .on-dark{display:block} }
 .nav .lnk{color:var(--body);font-size:14.5px}
 .nav .lnk:hover{color:var(--ink)}
-@media (max-width:800px){ .nav .lnk.hide{display:none} }
+@media (max-width:840px){ .nav .lnk.hide{display:none} }
 
 /* ── Shared ──────────────────────────────────────────────────────────── */
 .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
 .narrow{max-width:720px;margin:0 auto}
-.band{padding:112px 0}
+.band{padding:108px 0}
 .center{text-align:center}
-h1{font-size:clamp(40px,6.2vw,72px);line-height:1.02;letter-spacing:-.04em;font-weight:640;margin:0}
+h1{font-size:clamp(40px,6.2vw,70px);line-height:1.03;letter-spacing:-.04em;font-weight:640;margin:0}
 h2{font-size:clamp(28px,3.6vw,42px);line-height:1.1;letter-spacing:-.032em;font-weight:640;margin:0 0 16px}
 h3{font-size:17.5px;letter-spacing:-.018em;font-weight:600;margin:0 0 7px}
 p{margin:0 0 18px;color:var(--body)}
-.lede{font-size:19.5px;line-height:1.55}
-.eyebrow{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;
+.lede{font-size:19.5px;line-height:1.56}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;
   letter-spacing:.06em;text-transform:uppercase;color:var(--brand);margin:0 0 16px}
 .eyebrow::before{content:"";width:16px;height:1.5px;background:var(--brand);border-radius:2px}
 .center .eyebrow{justify-content:center}
-code{font-family:var(--mono);font-size:.86em;background:var(--wash);border:1px solid var(--hair);
-  border-radius:5px;padding:1.5px 6px}
+code{font-family:var(--mono);font-size:.86em;background:var(--chip);border:1px solid var(--hair);
+  border-radius:5px;padding:1.5px 6px;color:var(--ink)}
 .grad{background:linear-gradient(105deg,var(--brand),var(--layer) 55%,var(--brand));
   -webkit-background-clip:text;background-clip:text;color:transparent}
 
-/* ── Hero ────────────────────────────────────────────────────────────── */
-.hero{position:relative;padding:92px 0 0;overflow:hidden}
-.hero::before{content:"";position:absolute;inset:0;background-image:radial-gradient(var(--dot) 1px,transparent 1px);
-  background-size:22px 22px;
-  -webkit-mask-image:radial-gradient(ellipse 70% 62% at 50% 34%,#000 35%,transparent 78%);
-  mask-image:radial-gradient(ellipse 70% 62% at 50% 34%,#000 35%,transparent 78%);pointer-events:none}
-.hero::after{content:"";position:absolute;inset:0;background:var(--glow);pointer-events:none}
-.hero > *{position:relative;z-index:1}
-
-.pill{display:inline-flex;align-items:center;gap:9px;height:30px;padding:0 6px 0 12px;border-radius:999px;
-  border:1px solid var(--hair);background:var(--card);font-size:13px;color:var(--body);margin-bottom:28px}
-.pill b{color:var(--ink);font-weight:550}
-.pill .tag{background:var(--brand);color:#fff;font-size:11px;font-weight:600;border-radius:999px;
-  padding:2px 8px;letter-spacing:.01em}
-
-.cta{display:flex;gap:11px;justify-content:center;flex-wrap:wrap;margin-top:34px}
+/* ── Buttons ─────────────────────────────────────────────────────────── */
 .btn{position:relative;display:inline-flex;align-items:center;gap:8px;height:48px;padding:0 24px;
   border-radius:999px;font-size:15px;font-weight:550;border:1px solid transparent;cursor:pointer;
   font-family:inherit;overflow:hidden;
@@ -123,17 +121,24 @@ code{font-family:var(--mono);font-size:.86em;background:var(--wash);border:1px s
 .btn:active{transform:scale(.975)}
 .btn.solid{background:var(--ink);color:var(--paper)}
 .btn.solid:hover{background:#2a2f3a}
-@media (prefers-color-scheme:dark){ .btn.solid:hover{background:#e2e6ef} }
-/* A single sweep of light across the primary button, the way most devtool
-   landing pages mark the one action they want you to take. */
+@media (prefers-color-scheme:dark){ .btn.solid:hover{background:#dfe4ee} }
 .btn.solid::after{content:"";position:absolute;inset:0;
   background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.28) 50%,transparent 65%);
   transform:translateX(-120%);animation:sweep 4.5s cubic-bezier(0.22,1,0.36,1) infinite}
 @keyframes sweep{0%,72%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
+/* Outlined buttons need a real edge in dark. The first version used the same
+   hairline as a divider and they vanished into the background. */
 .btn.ghost{border-color:var(--hair);color:var(--ink);background:var(--card)}
-.btn.ghost:hover{border-color:var(--soft)}
+.btn.ghost:hover{border-color:var(--soft);background:var(--wash)}
 
-.copyline{display:inline-flex;align-items:center;gap:12px;margin-top:24px;padding:10px 12px 10px 18px;
+.cta{display:flex;gap:11px;justify-content:center;flex-wrap:wrap;margin-top:32px}
+.pill{display:inline-flex;align-items:center;gap:9px;height:30px;padding:0 6px 0 12px;border-radius:999px;
+  border:1px solid var(--hair);background:var(--card);font-size:13px;color:var(--body);margin-bottom:26px}
+.pill b{color:var(--ink);font-weight:550}
+.pill .tag{background:var(--brand);color:#fff;font-size:11px;font-weight:600;border-radius:999px;
+  padding:2px 8px}
+
+.copyline{display:inline-flex;align-items:center;gap:12px;margin-top:22px;padding:10px 12px 10px 18px;
   border:1px solid var(--hair);border-radius:12px;background:var(--card);font-family:var(--mono);
   font-size:13.5px;color:var(--ink)}
 .copyline .dollar{color:var(--soft)}
@@ -142,30 +147,97 @@ code{font-family:var(--mono);font-size:.86em;background:var(--wash);border:1px s
 .copyline button:hover{color:var(--ink)}
 .copyline .tick{position:absolute;inset:0;display:grid;place-items:center;color:#16a34a}
 
-/* ── Terminal ────────────────────────────────────────────────────────── */
-.term{margin:58px auto 0;max-width:820px;border-radius:16px;overflow:hidden;background:var(--deep);
-  border:1px solid var(--hair);box-shadow:0 40px 80px -40px rgba(15,17,22,.55)}
-.term .bar{display:flex;align-items:center;gap:7px;padding:12px 15px;background:rgba(255,255,255,.03);
-  border-bottom:1px solid rgba(255,255,255,.06)}
-.term .bar i{width:10px;height:10px;border-radius:50%;background:#2c313c;display:block}
-.term .bar b{flex:1;text-align:center;font:12px var(--mono);color:#5f6675;font-weight:400}
-.term pre{margin:0;padding:22px 22px 26px;font-family:var(--mono);font-size:13px;line-height:1.85;
-  color:#b8c0d0;text-align:left;overflow:auto;min-height:238px}
-.term .p{color:#4ade80}
-.term .d{color:#5f6675}
-.term .w{color:#f1f3f8;font-weight:600}
-.term .bl{color:#7aa2f7}
-.term .ln{display:block;opacity:0;transform:translateY(4px);
-  transition:opacity .3s ease,transform .3s cubic-bezier(0.22,1,0.36,1)}
-.term .ln.on{opacity:1;transform:none}
-.term .cur{display:inline-block;width:7px;height:14px;background:#4ade80;vertical-align:-2px;
-  animation:blink 1.05s steps(2,start) infinite}
-@keyframes blink{to{visibility:hidden}}
+/* ── Hero ────────────────────────────────────────────────────────────── */
+.hero{position:relative;padding:88px 0 0;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;
+  background-image:radial-gradient(var(--dot) 1px,transparent 1px);background-size:22px 22px;
+  -webkit-mask-image:radial-gradient(ellipse 70% 60% at 50% 32%,#000 35%,transparent 78%);
+  mask-image:radial-gradient(ellipse 70% 60% at 50% 32%,#000 35%,transparent 78%);pointer-events:none}
+.hero::after{content:"";position:absolute;inset:0;background:var(--glow);pointer-events:none}
+.hero > *{position:relative;z-index:1}
+
+/* ── The try-it demo ─────────────────────────────────────────────────── */
+.demo{margin:52px auto 0;max-width:900px;border-radius:18px;background:var(--card);
+  border:1px solid var(--edge);box-shadow:0 40px 90px -46px rgba(15,17,22,.55);overflow:hidden}
+.demo .bar{display:flex;align-items:center;gap:8px;padding:12px 15px;background:var(--chrome);
+  border-bottom:1px solid var(--edge)}
+/* The real traffic lights. The first version painted all three in the divider
+   colour, which on a dark card is a row of three holes. */
+.demo .bar i{width:11px;height:11px;border-radius:50%;display:block;flex:none}
+.demo .bar i:nth-child(1){background:#ff5f57}
+.demo .bar i:nth-child(2){background:#febc2e}
+.demo .bar i:nth-child(3){background:#28c840}
+.demo .bar b{flex:1;text-align:center;font:12px var(--mono);color:var(--soft);font-weight:400;
+  background:var(--wash);border:1px solid var(--edge);border-radius:7px;padding:3px 12px;
+  max-width:280px;margin:0 auto}
+.demo .bar .tool{display:flex;gap:3px;background:var(--chip);border-radius:999px;padding:3px}
+.demo .bar .tool span{font-size:10.5px;padding:2px 8px;border-radius:999px;color:var(--chip-ink)}
+.demo .bar .tool span.on{background:var(--brand);color:#fff;font-weight:600}
+.stage{position:relative;padding:34px 30px 40px;text-align:left;min-height:280px}
+
+/* the fake shop, which is also the thing you click */
+.shop-h{font-size:26px;letter-spacing:-.028em;font-weight:640;margin:0 0 4px}
+.shop-s{font-size:14.5px;color:var(--body);margin:0 0 22px}
+.shop-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media (max-width:700px){ .shop-grid{grid-template-columns:1fr} }
+.bean{border:1px solid var(--hair);border-radius:13px;padding:15px 16px;background:var(--paper)}
+.bean .n{font-size:16px;font-weight:600;letter-spacing:-.018em;margin:0 0 3px}
+.bean .t{font-size:13px;color:var(--body);margin:0 0 9px}
+.bean .p{font-size:14.5px;font-weight:640}
+.shop-cta{margin-top:20px;display:inline-flex;align-items:center;height:38px;padding:0 18px;
+  border-radius:999px;background:var(--ink);color:var(--paper);font-size:14px;font-weight:550}
+
+/* anything tagged as clickable in the demo */
+[data-pick]{cursor:crosshair;border-radius:5px;transition:box-shadow .16s ease,background .16s ease}
+.stage.armed [data-pick]:hover{box-shadow:0 0 0 2px var(--brand);background:rgba(47,109,246,.07)}
+[data-pick].chosen{box-shadow:0 0 0 2px var(--brand);background:rgba(47,109,246,.09)}
+
+.hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:inline-flex;
+  align-items:center;gap:8px;font-size:12.5px;color:var(--soft);background:var(--wash);
+  border:1px solid var(--hair);border-radius:999px;padding:5px 13px;white-space:nowrap}
+.hint b{color:var(--ink);font-weight:550}
+.hint.gone{opacity:0;transition:opacity .3s ease}
+
+.dpin{position:absolute;width:21px;height:21px;border-radius:50%;background:var(--brand);color:#fff;
+  font:600 11px/21px var(--sans);text-align:center;border:2px solid var(--card);z-index:3;
+  box-shadow:0 3px 10px rgba(15,17,22,.35);transform:translate(-50%,-50%) scale(0);
+  transition:transform .34s cubic-bezier(0.34,1.36,0.64,1)}
+.dpin.in{transform:translate(-50%,-50%) scale(1)}
+
+.note-card{position:absolute;z-index:4;width:272px;background:var(--card);border:1px solid var(--hair);
+  border-radius:13px;box-shadow:0 22px 44px -18px rgba(15,17,22,.45);overflow:hidden;
+  opacity:0;transform:translateY(6px) scale(.985);pointer-events:none;
+  transition:opacity .26s cubic-bezier(0.22,1,0.36,1),transform .26s cubic-bezier(0.22,1,0.36,1)}
+.note-card.in{opacity:1;transform:none;pointer-events:auto}
+.note-card .h{display:flex;align-items:center;gap:7px;padding:9px 11px;background:var(--wash);
+  border-bottom:1px solid var(--hair);font-size:12px;font-weight:600}
+.note-card .h em{margin-left:auto;font-style:normal;color:var(--soft);font-weight:400;cursor:pointer;
+  padding:0 3px}
+.note-card .b{padding:11px}
+.note-card .path{font-family:var(--mono);font-size:10.5px;color:var(--soft);line-height:1.6;
+  word-break:break-all;margin-bottom:9px}
+.note-card .path b{display:inline-block;background:rgba(47,109,246,.14);color:var(--brand);
+  border-radius:4px;padding:1px 5px;font-weight:600;margin-left:3px}
+.note-card .path i{font-style:normal;color:#c2740b;display:block;margin-top:3px}
+@media (prefers-color-scheme:dark){ .note-card .path i{color:#f0a94c} }
+.note-card .in{width:100%;height:34px;border:1px solid var(--hair);border-radius:8px;background:var(--wash);
+  padding:0 10px;font:inherit;font-size:12.5px;color:var(--ink)}
+.note-card .in::placeholder{color:var(--soft)}
+.note-card .chips{display:flex;gap:5px;margin-top:9px}
+/* These are the ones that vanished before: a soft fill one shade off the card
+   is invisible in dark. --chip is a real step away from both. */
+.note-card .chips span{flex:1;text-align:center;font-size:11px;padding:5px 0;border-radius:7px;
+  background:var(--chip);color:var(--chip-ink)}
+.note-card .chips span.on{background:var(--brand);color:#fff;font-weight:600}
+
+.done{margin-top:18px;font-size:14.5px;color:var(--body);min-height:22px}
+.done b{color:var(--ink);font-weight:550}
+.done a{color:var(--brand);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 
 /* ── Marquee ─────────────────────────────────────────────────────────── */
-.strip{padding:52px 0 0}
-.strip p{text-align:center;font-size:13.5px;color:var(--soft);margin:0 0 22px}
-.marquee{display:flex;overflow:hidden;gap:0;
+.strip{padding:54px 0 0}
+.strip p{text-align:center;font-size:13.5px;color:var(--soft);margin:0 0 20px}
+.marquee{display:flex;overflow:hidden;
   -webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);
   mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}
 .marquee ul{display:flex;align-items:center;gap:52px;margin:0;padding:0 26px;list-style:none;flex:none;
@@ -174,39 +246,35 @@ code{font-family:var(--mono);font-size:.86em;background:var(--wash);border:1px s
 @keyframes slide{to{transform:translateX(-100%)}}
 .marquee:hover ul{animation-play-state:paused}
 
-/* ── Portrait-style three-up ─────────────────────────────────────────── */
-.three{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:52px}
+/* ── Three-up ────────────────────────────────────────────────────────── */
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:50px}
 @media (max-width:880px){ .three{grid-template-columns:1fr;gap:34px} }
-.step .visual{background:var(--wash);border-radius:18px;height:238px;padding:22px;display:grid;
-  place-items:center;overflow:hidden;position:relative}
+.step .visual{background:var(--wash);border:1px solid var(--hair);border-radius:18px;height:230px;
+  padding:22px;display:grid;place-items:center;overflow:hidden;position:relative}
 .step h3{margin:22px 0 6px;text-align:center;font-size:19px}
-.step p{margin:0 auto;text-align:center;font-size:15px;max-width:30ch}
-
-/* the little UI mocks inside those cards */
+.step p{margin:0 auto;text-align:center;font-size:15px;max-width:31ch}
 .mock{width:100%;font-family:var(--mono);font-size:10.5px}
-.mock-bar{display:flex;align-items:center;gap:4px;background:#1c1f27;border-radius:999px;padding:6px 8px;
-  box-shadow:0 10px 24px -12px rgba(15,17,22,.6);width:max-content;margin:0 auto}
-.mock-bar span{color:#9aa1b1;padding:3px 7px;border-radius:999px;font-size:10px}
-.mock-bar span.on{background:var(--brand);color:#fff}
-.mock-card{background:var(--card);border:1px solid var(--hair);border-radius:11px;padding:11px 12px;
-  box-shadow:0 14px 30px -18px rgba(15,17,22,.35)}
+.mock-bar{display:flex;align-items:center;gap:3px;background:var(--chip);border-radius:999px;padding:4px;
+  width:max-content;margin:0 auto}
+.mock-bar span{color:var(--chip-ink);padding:3px 9px;border-radius:999px;font-size:10.5px}
+.mock-bar span.on{background:var(--brand);color:#fff;font-weight:600}
+.mock-card{background:var(--card);border:1px solid var(--hair);border-radius:11px;padding:11px 12px}
 .mock-card .t{font-size:10.5px;color:var(--soft);margin-bottom:7px}
-.mock-card .t b{color:var(--brand);background:rgba(47,109,246,.12);border-radius:4px;padding:1px 5px}
-.mock-card .in{height:34px;border:1px solid var(--hair);border-radius:7px;background:var(--wash);
-  display:flex;align-items:center;padding:0 9px;color:var(--soft);font-size:10.5px}
+.mock-card .t b{color:var(--brand);background:rgba(47,109,246,.14);border-radius:4px;padding:1px 5px}
+.mock-card .in{height:32px;border:1px solid var(--hair);border-radius:7px;background:var(--wash);
+  display:flex;align-items:center;padding:0 9px;color:var(--body);font-size:10.5px}
 .mock-card .chips{display:flex;gap:4px;margin-top:8px}
-.mock-card .chips i{flex:1;height:17px;border-radius:5px;background:var(--wash);font-style:normal;
-  display:grid;place-items:center;font-size:9px;color:var(--soft)}
-.mock-card .chips i.on{background:var(--brand);color:#fff}
-.mock-doc{background:var(--deep);border-radius:11px;padding:13px;color:#b8c0d0;line-height:1.75;
-  font-size:10px;width:100%}
+.mock-card .chips i{flex:1;height:19px;border-radius:6px;background:var(--chip);font-style:normal;
+  display:grid;place-items:center;font-size:9.5px;color:var(--chip-ink)}
+.mock-card .chips i.on{background:var(--brand);color:#fff;font-weight:600}
+.mock-doc{background:var(--deep);border:1px solid var(--hair);border-radius:11px;padding:13px;
+  color:#b8c0d0;line-height:1.8;font-size:10px;width:100%}
 .mock-doc .b{color:#7aa2f7} .mock-doc .w{color:#f1f3f8}
 .pin{position:absolute;width:19px;height:19px;border-radius:50%;background:var(--brand);color:#fff;
-  font:600 10px/19px var(--sans);text-align:center;border:2px solid var(--paper);
-  box-shadow:0 3px 8px rgba(15,17,22,.3)}
+  font:600 10px/19px var(--sans);text-align:center;border:2px solid var(--wash)}
 
 /* ── Bento ───────────────────────────────────────────────────────────── */
-.bento{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-top:50px}
+.bento{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-top:48px}
 .cell{position:relative;grid-column:span 2;background:var(--card);border:1px solid var(--hair);
   border-radius:18px;padding:24px;overflow:hidden;isolation:isolate;
   transition:transform .3s cubic-bezier(0.22,1,0.36,1),border-color .3s ease}
@@ -214,13 +282,9 @@ code{font-family:var(--mono);font-size:.86em;background:var(--wash);border:1px s
 .cell.w3{grid-column:span 3}
 @media (max-width:900px){ .bento{grid-template-columns:repeat(2,1fr)} .cell,.cell.w3{grid-column:span 1} }
 @media (max-width:560px){ .bento{grid-template-columns:1fr} }
-.cell .key{display:inline-block;font-family:var(--mono);font-size:10.5px;background:var(--wash);
-  border:1px solid var(--hair);border-radius:5px;padding:1px 6px;color:var(--soft);margin-left:7px;
-  vertical-align:1.5px}
-.cell p{margin:0;font-size:14.5px;line-height:1.55}
-/* A light running around the border on hover. The card sits on its own
-   stacking context, so the rotating conic below only shows through the 1px
-   the inner surface does not cover. */
+.cell .key{display:inline-block;font-family:var(--mono);font-size:10.5px;background:var(--chip);
+  border-radius:5px;padding:1.5px 7px;color:var(--chip-ink);margin-left:7px;vertical-align:1.5px}
+.cell p{margin:0;font-size:14.5px;line-height:1.58}
 .cell::before{content:"";position:absolute;inset:-140%;z-index:-2;opacity:0;
   background:conic-gradient(from 0deg,transparent 0 62%,var(--layer) 78%,var(--brand) 88%,transparent 100%);
   animation:spin 4s linear infinite;transition:opacity .3s ease}
@@ -228,22 +292,20 @@ code{font-family:var(--mono);font-size:.86em;background:var(--wash);border:1px s
 .cell:hover::before{opacity:1}
 @keyframes spin{to{transform:rotate(1turn)}}
 
-/* ── Rows ────────────────────────────────────────────────────────────── */
-.rows{margin-top:34px;border-top:1px solid var(--hair)}
+/* ── Rows / notes / stats ────────────────────────────────────────────── */
+.rows{margin-top:32px;border-top:1px solid var(--hair)}
 .row{display:flex;gap:22px;padding:19px 0;border-bottom:1px solid var(--hair)}
-.row .lead{flex:0 0 156px;font-weight:550;letter-spacing:-.015em}
+.row .lead{flex:0 0 152px;font-weight:550;letter-spacing:-.015em}
 .row .say{flex:1;color:var(--body);font-size:15.5px;margin:0}
 @media (max-width:640px){ .row{flex-direction:column;gap:5px} .row .lead{flex:none} }
-
-.note{margin-top:30px;padding:19px 22px;border-radius:14px;background:rgba(47,109,246,.07);
-  border:1px solid rgba(47,109,246,.16)}
+.note{margin-top:28px;padding:19px 22px;border-radius:14px;background:rgba(47,109,246,.08);
+  border:1px solid rgba(47,109,246,.22)}
 .note p{margin:0;font-size:15px;color:var(--ink)}
-
-/* ── Stats ───────────────────────────────────────────────────────────── */
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:48px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:46px}
 @media (max-width:760px){ .stats{grid-template-columns:repeat(2,1fr)} }
-.stat{background:var(--wash);border-radius:16px;padding:26px 22px;text-align:center}
-.stat b{display:block;font-size:38px;line-height:1;letter-spacing:-.04em;font-weight:640;
+.stat{background:var(--wash);border:1px solid var(--hair);border-radius:16px;padding:26px 22px;
+  text-align:center}
+.stat b{display:block;font-size:37px;line-height:1;letter-spacing:-.04em;font-weight:640;
   font-variant-numeric:tabular-nums}
 .stat span{display:block;margin-top:9px;font-size:13.5px;color:var(--soft)}
 
@@ -261,12 +323,39 @@ code{font-family:var(--mono);font-size:.86em;background:var(--wash);border:1px s
   will-change:transform,width;z-index:0;pointer-events:none}
 @media (prefers-reduced-motion:reduce){ .t-tabs-pill,.t-tab{transition:none !important} }
 .t-tab{font-family:inherit;font-size:13.5px;font-weight:500}
-.t-tabs-pill{box-shadow:0 1px 3px rgba(15,17,22,.14)}
+.t-tabs-pill{box-shadow:0 1px 3px rgba(15,17,22,.18)}
 .snip{border:1px solid var(--hair);border-radius:14px;background:var(--wash);overflow:hidden}
 .snip pre{margin:0;padding:18px 20px;overflow:auto;font-family:var(--mono);font-size:13px;
   line-height:1.7;color:var(--ink);text-align:left}
 .snip pre .g{color:var(--soft)}
 .snip[hidden]{display:none}
+
+/* ── Install, as a sequence ──────────────────────────────────────────────
+   Three grey slabs in a row do not read as steps. Numbering them and running
+   a rule down the side says "do this, then this" without a word. */
+.steps{list-style:none;counter-reset:s;margin:26px auto 0;padding:0}
+.steps li{counter-increment:s;position:relative;padding:0 0 30px 46px}
+.steps li::before{content:counter(s);position:absolute;left:0;top:0;width:28px;height:28px;
+  border-radius:50%;background:var(--brand);color:#fff;font-size:13px;font-weight:640;
+  display:grid;place-items:center}
+.steps li:not(:last-child)::after{content:"";position:absolute;left:13.5px;top:34px;bottom:8px;
+  width:1px;background:var(--hair)}
+.steps h3{margin:4px 0 12px;font-size:17.5px}
+.steps .tiny{margin:9px 0 0;font-size:13.5px;color:var(--soft)}
+.steps kbd{font-family:var(--mono);font-size:11.5px;background:var(--chip);color:var(--chip-ink);
+  border-radius:5px;padding:1.5px 6px}
+
+.cmd{position:relative;border:1px solid var(--hair);border-radius:12px;background:var(--wash);
+  overflow:hidden}
+.cmd pre{margin:0;padding:15px 52px 15px 18px;overflow:auto;font-family:var(--mono);font-size:13px;
+  line-height:1.85;color:var(--ink);text-align:left}
+.cmd pre .d{color:var(--brand);user-select:none}
+.cmd .cp{position:absolute;top:9px;right:9px;width:30px;height:30px;border:1px solid var(--hair);
+  border-radius:8px;background:var(--card);color:var(--soft);display:grid;place-items:center;
+  cursor:pointer;transition:color .2s ease,border-color .2s ease}
+.cmd .cp:hover{color:var(--ink);border-color:var(--soft)}
+.cmd .cp svg{width:14px;height:14px}
+.cmd .cp.done{color:#16a34a;border-color:#16a34a}
 
 /* ── Accordion (transitions.dev 21, verbatim) ────────────────────────── */
 .t-acc{border-bottom:1px solid var(--hair)}
@@ -288,7 +377,7 @@ code{font-family:var(--mono);font-size:.86em;background:var(--wash);border:1px s
 @media (prefers-reduced-motion:reduce){
   .t-acc-panel,.t-acc-panel-inner,.t-acc-chevron{transition:none !important}
 }
-.t-acc-chevron svg{width:15px;height:15px;fill:none;stroke:var(--soft);stroke-width:1.7;
+.t-acc-chevron svg{width:15px;height:15px;fill:none;stroke:var(--soft);stroke-width:1.8;
   stroke-linecap:round;stroke-linejoin:round}
 .t-acc-panel-inner p{padding:0 2px 22px;margin:0;max-width:62ch;font-size:15.5px}
 
@@ -330,29 +419,23 @@ code{font-family:var(--mono);font-size:.86em;background:var(--wash);border:1px s
   transition:opacity 200ms ease,transform 0s linear,filter 0s linear;transition-delay:0s}
 @media (prefers-reduced-motion:reduce){ .t-stagger-line{transition:none !important} }
 
-/* The marquee and the border beam are decoration; they stop too. */
 @media (prefers-reduced-motion:reduce){
-  .marquee ul{animation:none}
-  .cell::before{animation:none}
-  .btn.solid::after{animation:none}
-  .term .cur{animation:none}
-  .term .ln{transition:none}
+  .marquee ul,.cell::before,.btn.solid::after{animation:none}
+  .dpin,.note-card,[data-pick]{transition:none}
 }
 
-/* ── Closing CTA, with the dashed rule the buttons interrupt ─────────── */
-.close{position:relative;padding:104px 0 112px;text-align:center}
-.close::before{content:"";position:absolute;inset:0;background-image:radial-gradient(var(--dot) 1px,transparent 1px);
-  background-size:22px 22px;
+/* ── Close + footer ──────────────────────────────────────────────────── */
+.close{position:relative;padding:100px 0 108px;text-align:center}
+.close::before{content:"";position:absolute;inset:0;
+  background-image:radial-gradient(var(--dot) 1px,transparent 1px);background-size:22px 22px;
   -webkit-mask-image:radial-gradient(ellipse 62% 78% at 50% 50%,#000 20%,transparent 76%);
   mask-image:radial-gradient(ellipse 62% 78% at 50% 50%,#000 20%,transparent 76%);pointer-events:none}
 .close > *{position:relative;z-index:1}
-.dashrule{display:flex;align-items:center;gap:20px;margin-top:38px}
+.dashrule{display:flex;align-items:center;gap:20px;margin-top:36px}
 .dashrule::before,.dashrule::after{content:"";flex:1;height:1px;
   background:repeating-linear-gradient(90deg,var(--hair) 0 6px,transparent 6px 12px)}
-
-/* ── Footer ──────────────────────────────────────────────────────────── */
 footer{border-top:1px solid var(--hair);background:var(--wash)}
-.foot{max-width:1120px;margin:0 auto;padding:52px 24px 40px;display:grid;
+.foot{max-width:1120px;margin:0 auto;padding:52px 24px 38px;display:grid;
   grid-template-columns:1.6fr repeat(3,1fr);gap:34px}
 @media (max-width:800px){ .foot{grid-template-columns:1fr 1fr} }
 .foot h5{margin:0 0 12px;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--soft);
@@ -360,8 +443,8 @@ footer{border-top:1px solid var(--hair);background:var(--wash)}
 .foot a{display:block;padding:4px 0;color:var(--body);font-size:14.5px}
 .foot a:hover{color:var(--ink)}
 .foot .about img{height:22px;margin-bottom:14px}
-.foot .about p{font-size:14px;margin:0;max-width:30ch}
-.legal{max-width:1120px;margin:0 auto;padding:0 24px 44px;display:flex;gap:16px;flex-wrap:wrap;
+.foot .about p{font-size:14px;margin:0;max-width:31ch}
+.legal{max-width:1120px;margin:0 auto;padding:0 24px 42px;display:flex;gap:16px;flex-wrap:wrap;
   color:var(--soft);font-size:13.5px}
 .legal .sp{margin-left:auto}
 </style>
@@ -375,9 +458,9 @@ footer{border-top:1px solid var(--hair);background:var(--wash)}
       <img class="on-dark" src="assets/logo-dark.svg" alt="Laminator" width="319" height="64">
     </a>
     <a class="lnk" href="#how">How it works</a>
-    <a class="lnk hide" href="#modes">Modes</a>
+    <a class="lnk hide" href="#modes">What you can point at</a>
     <a class="lnk hide" href="#install">Install</a>
-    <a class="lnk hide" href="#faq">FAQ</a>
+    <a class="lnk hide" href="#faq">Questions</a>
     <a class="btn ghost" style="height:36px;padding:0 16px;font-size:14px" href="https://github.com/Alphapatil-26/Laminator">GitHub</a>
   </nav>
 </header>
@@ -387,44 +470,59 @@ footer{border-top:1px solid var(--hair);background:var(--wash)}
   <div class="wrap center">
     <div class="t-stagger" id="hero">
       <div class="t-stagger-line t-stagger-line--1">
-        <span class="pill"><b>v0.1.0</b> · zero dependencies <span class="tag">MIT</span></span>
+        <span class="pill"><b>v0.1.0</b> · nothing to configure <span class="tag">MIT</span></span>
       </div>
-      <h1 class="t-stagger-line t-stagger-line--2">From the surface.</h1>
-      <h1 class="t-stagger-line t-stagger-line--3 grad">To the source.</h1>
-      <p class="lede t-stagger-line t-stagger-line--4" style="max-width:560px;margin:22px auto 0">
-        Click the heading that sits too tight. Laminator works out which rule paints it
-        and hands your coding agent <code>cards.css:3</code>, what the rule says now, and
-        how many other things it would move.
+      <h1 class="t-stagger-line t-stagger-line--2">Click the element.</h1>
+      <h1 class="t-stagger-line t-stagger-line--3 grad">Get the line of code.</h1>
+      <p class="lede t-stagger-line t-stagger-line--4" style="max-width:552px;margin:22px auto 0">
+        Something looks off on the page. You click it, say what's up, and your coding
+        agent gets the file and the line that made it. No screenshots. No going
+        looking.
       </p>
       <div class="cta t-stagger-line t-stagger-line--5">
         <a class="btn solid" href="#install">Start using it</a>
-        <a class="btn ghost" href="https://github.com/Alphapatil-26/Laminator">Read the source</a>
+        <a class="btn ghost" href="https://github.com/Alphapatil-26/Laminator">Read the code</a>
       </div>
     </div>
 
-    <div class="copyline">
-      <span class="dollar">$</span><span id="cmd">npm i -D laminator</span>
-      <button id="copy" aria-label="Copy install command" title="Copy">
-        <svg id="copyicon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M6 15H5a2 2 0 01-2-2V5a2 2 0 012-2h8a2 2 0 012 2v1"/>
-        </svg>
-        <span class="t-success-check" id="tick" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M5 12.5L10 17.5L19 7"/></svg>
+    <!-- Not a picture of the tool. This is the tool's idea, working. -->
+    <div class="demo">
+      <div class="bar">
+        <i></i><i></i><i></i>
+        <b>localhost:5173</b>
+        <span class="tool" aria-hidden="true">
+          <span class="on">Pick</span><span>Text</span><span>Multi</span><span>Area</span>
         </span>
-      </button>
+      </div>
+      <div class="stage armed" id="stage">
+        <h3 class="shop-h" data-pick="title">Fresh this week</h3>
+        <p class="shop-s" data-pick="sub">Roasted the Tuesday before it reaches you.</p>
+        <div class="shop-grid">
+          <div class="bean">
+            <p class="n" data-pick="name">Yirgacheffe</p>
+            <p class="t" data-pick="note">Jasmine, bergamot</p>
+            <span class="p" data-pick="price">£14</span>
+          </div>
+          <div class="bean">
+            <p class="n" data-pick="name">Huila</p>
+            <p class="t" data-pick="note">Cocoa, red apple</p>
+            <span class="p" data-pick="price">£12</span>
+          </div>
+          <div class="bean">
+            <p class="n" data-pick="name">Kirinyaga</p>
+            <p class="t" data-pick="note">Blackcurrant</p>
+            <span class="p" data-pick="price">£16</span>
+          </div>
+        </div>
+        <div class="shop-cta" data-pick="cta">Start a subscription</div>
+        <div class="hint" id="hint">Have a go — <b>click anything above</b></div>
+      </div>
     </div>
-
-    <div class="term" id="term">
-      <div class="bar"><i></i><i></i><i></i><b>~/bramble-coffee</b></div>
-<pre id="termout"></pre>
-    </div>
+    <p class="done" id="done"></p>
   </div>
 
   <div class="strip">
-    <p>Framework-agnostic. One script tag, whatever you build with.</p>
+    <p>Whatever you build with. One script tag.</p>
     <div class="marquee" id="marq">
       <ul>
         <li>React</li><li>Next.js</li><li>Vue</li><li>Nuxt</li><li>Svelte</li><li>SvelteKit</li>
@@ -435,30 +533,28 @@ footer{border-top:1px solid var(--hair);background:var(--wash)}
   </div>
 </section>
 
-<!-- ══ How it works — Portrait-style three-up ════════════════════════ -->
+<!-- ══ How it works ══════════════════════════════════════════════════ -->
 <section class="band wrap" id="how">
   <div class="narrow center reveal t-stagger">
     <p class="eyebrow t-stagger-line t-stagger-line--1">How it works</p>
-    <h2 class="t-stagger-line t-stagger-line--2">Point, describe, hand over</h2>
-    <p class="lede t-stagger-line t-stagger-line--3">Three steps, and the middle one is the only one you do by hand.</p>
+    <h2 class="t-stagger-line t-stagger-line--2">Three steps, and you only do one</h2>
+    <p class="lede t-stagger-line t-stagger-line--3">The middle bit is yours. Laminator handles either side of it.</p>
   </div>
 
   <div class="three">
     <div class="step">
       <div class="visual">
         <div class="mock">
-          <div class="mock-bar">
-            <span class="on">Pick</span><span>Text</span><span>Multi</span><span>Area</span>
-          </div>
+          <div class="mock-bar"><span class="on">Pick</span><span>Text</span><span>Multi</span><span>Area</span></div>
           <div class="mock-card" style="margin-top:22px">
-            <div style="height:9px;width:62%;background:var(--hair);border-radius:3px"></div>
-            <div style="height:9px;width:40%;background:var(--hair);border-radius:3px;margin-top:7px"></div>
+            <div style="height:9px;width:62%;background:var(--chip);border-radius:3px"></div>
+            <div style="height:9px;width:40%;background:var(--chip);border-radius:3px;margin-top:7px"></div>
           </div>
         </div>
-        <span class="pin" style="left:calc(50% - 52px);top:150px">1</span>
+        <span class="pin" style="left:calc(50% - 52px);top:146px">1</span>
       </div>
-      <h3>Click the thing</h3>
-      <p>Pick an element, select some copy, tick several at once, or drag a box round a region.</p>
+      <h3>You click it</h3>
+      <p>One element, some words, a few things at once, or a box round a whole area.</p>
     </div>
 
     <div class="step">
@@ -471,8 +567,8 @@ footer{border-top:1px solid var(--hair);background:var(--wash)}
           </div>
         </div>
       </div>
-      <h3>Say what's wrong</h3>
-      <p>Type it or dictate it. Laminator has already worked out which rule paints it.</p>
+      <h3>You say what's up</h3>
+      <p>Type it, or just say it out loud. It already knows which rule made it.</p>
     </div>
 
     <div class="step">
@@ -488,69 +584,68 @@ footer{border-top:1px solid var(--hair);background:var(--wash)}
         </div>
       </div>
       <h3>Your agent takes it</h3>
-      <p>It opens with the whole batch. Each pin greys out as the fix lands.</p>
+      <p>It opens with the lot. Pins turn grey as each one gets fixed.</p>
     </div>
   </div>
 </section>
 
-<!-- ══ Bento — capture modes ═════════════════════════════════════════ -->
+<!-- ══ Modes ═════════════════════════════════════════════════════════ -->
 <section class="band wrap" id="modes" style="padding-top:0">
   <div class="narrow center reveal t-stagger">
     <p class="eyebrow t-stagger-line t-stagger-line--1">Pointing</p>
-    <h2 class="t-stagger-line t-stagger-line--2">Four ways to say <span class="grad">"this bit"</span></h2>
+    <h2 class="t-stagger-line t-stagger-line--2">Ways to say <span class="grad">"that bit"</span></h2>
   </div>
   <div class="bento">
     <div class="cell w3"><h3>Pick <span class="key">E</span></h3>
-      <p>One element. You get its rule, its computed styles, the component that rendered it, and any neighbour whose edge misses by a couple of pixels.</p></div>
+      <p>One element. You get the rule behind it, what the browser worked out, the component it came from, and any neighbour sitting a couple of pixels off.</p></div>
     <div class="cell w3"><h3>Text <span class="key">T</span></h3>
-      <p>Select some copy and the exact words come through, so nobody has to guess which sentence you meant.</p></div>
+      <p>Highlight some words and those exact words come through. Nobody has to guess which sentence you meant.</p></div>
     <div class="cell"><h3>Multi <span class="key">M</span></h3>
-      <p>Click several things. Press M again and they become one comment about all of them.</p></div>
+      <p>Tick a few things, press M again, and they become one comment about all of them.</p></div>
     <div class="cell"><h3>Area <span class="key">A</span></h3>
-      <p>Drag a box. You get the container and everything inside, for when the problem is the arrangement.</p></div>
+      <p>Drag a box. You get the container and everything in it, for when the layout is the problem.</p></div>
     <div class="cell"><h3>Freeze <span class="key">P</span></h3>
-      <p>Stops every animation and transition so you can annotate the frame that's actually wrong.</p></div>
+      <p>Pauses every animation so you can point at the frame that's actually wrong.</p></div>
     <div class="cell w3"><h3>Screenshots</h3>
-      <p>Attaches a real picture of the element with room around it, so the spacing you're complaining about is visible.</p></div>
-    <div class="cell w3"><h3>Live CSS edits</h3>
-      <p>When the rule is writable the popup lists its declarations. Change one, press Enter, and it goes into the file.</p></div>
+      <p>Grabs a real picture of the element with a bit of room around it, so the spacing you mean is visible.</p></div>
+    <div class="cell w3"><h3>Change it there and then</h3>
+      <p>If the rule is one it can write to, the box lists what it says. Edit a value, hit Enter, and it lands in the file.</p></div>
   </div>
 </section>
 
 <!-- ══ The scan ══════════════════════════════════════════════════════ -->
 <section class="band wrap" style="padding-top:0">
   <div class="narrow reveal t-stagger">
-    <p class="eyebrow t-stagger-line t-stagger-line--1">The scan</p>
-    <h2 class="t-stagger-line t-stagger-line--2">It reads your project first</h2>
+    <p class="eyebrow t-stagger-line t-stagger-line--1">Setup</p>
+    <h2 class="t-stagger-line t-stagger-line--2">It learns your project first</h2>
     <p class="t-stagger-line t-stagger-line--3">
-      Nothing is hardcoded. On <code>init</code> it walks the repo, works out what you build
-      with, finds the stylesheets it may touch, and indexes every selector against the rules
-      that mention it. The server proposes candidates; your browser confirms them with
-      <code>element.matches()</code>.
+      There's nothing to fill in. The first time you run it, Laminator reads your repo:
+      what you build with, which stylesheets it's allowed to touch, and which rule lives
+      on which line. After that it just knows.
     </p>
   </div>
   <div class="narrow rows">
-    <div class="row"><div class="lead"><code>rule</code></div><p class="say">A stylesheet rule paints it. Your agent gets the file, the line, what it declares now, and how many elements share it.</p></div>
-    <div class="row"><div class="lead"><code>utility</code></div><p class="say">Tailwind, or something like it. No rule to edit, so you get the class list and the component name.</p></div>
-    <div class="row"><div class="lead"><code>none</code></div><p class="say">A CSS module, a style block, or CSS-in-JS. You get the classes to search for.</p></div>
+    <div class="row"><div class="lead"><code>rule</code></div><p class="say">A stylesheet rule made it. You get the file, the line, what it says now, and how many other elements share it.</p></div>
+    <div class="row"><div class="lead"><code>utility</code></div><p class="say">Tailwind, or something like it. No rule to open, so you get the class list and the component name.</p></div>
+    <div class="row"><div class="lead"><code>none</code></div><p class="say">A CSS module, a style block, or CSS-in-JS. You get the classes to go looking for.</p></div>
   </div>
   <div class="narrow note">
-    <p>CSS modules stay out of the index. Their class names are hashed when you build, so a
-    selector in the browser can't be traced back to source. An anchor there would look right
-    and point nowhere.</p>
+    <p>CSS modules are left out on purpose. Their class names get scrambled when you build,
+    so what you see in the browser can't be traced back. Pointing at a line there would
+    look right and be wrong.</p>
   </div>
 </section>
 
 <!-- ══ Numbers ═══════════════════════════════════════════════════════ -->
 <section class="band wrap" style="padding-top:0">
   <div class="narrow center reveal t-stagger">
-    <p class="eyebrow t-stagger-line t-stagger-line--1">Measured, not claimed</p>
+    <p class="eyebrow t-stagger-line t-stagger-line--1">The numbers</p>
     <h2 class="t-stagger-line t-stagger-line--2">Small enough to read in an afternoon</h2>
   </div>
   <div class="stats">
-    <div class="stat"><b data-n="0">0</b><span>npm dependencies</span></div>
-    <div class="stat"><b data-n="853" data-suffix=" files">0</b><span>scanned in 104ms</span></div>
-    <div class="stat"><b data-n="44" data-suffix=" kB">0</b><span>packed, whole tool</span></div>
+    <div class="stat"><b data-n="0">0</b><span>things it installs</span></div>
+    <div class="stat"><b data-n="853" data-suffix=" files">0</b><span>read in 104ms</span></div>
+    <div class="stat"><b data-n="44" data-suffix=" kB">0</b><span>the whole tool</span></div>
     <div class="stat"><b data-n="100" data-suffix="%">0</b><span>on your machine</span></div>
   </div>
 </section>
@@ -560,14 +655,21 @@ footer{border-top:1px solid var(--hair);background:var(--wash)}
   <div class="narrow reveal t-stagger">
     <p class="eyebrow t-stagger-line t-stagger-line--1">Install</p>
     <h2 class="t-stagger-line t-stagger-line--2">Two commands and one line</h2>
-    <p class="t-stagger-line t-stagger-line--3">Run it in your project root. It prints a script tag — add that in development only.</p>
+    <p class="t-stagger-line t-stagger-line--3">Run it in your project. It prints a script tag — put that in, but only for development.</p>
   </div>
-  <div class="narrow" style="margin-top:24px">
-    <div class="snip" style="margin-bottom:20px">
-<pre><span class="g"># in your project root</span>
-npm i -D laminator
-npx laminator init</pre>
-    </div>
+  <ol class="steps narrow">
+    <li>
+      <h3>Add it to your project</h3>
+      <div class="cmd" data-copy="npm i -D laminator
+npx laminator init">
+<pre><span class="d">$</span> npm i -D laminator
+<span class="d">$</span> npx laminator init</pre>
+      </div>
+      <p class="tiny">It reads your repo and prints the line for step two.</p>
+    </li>
+
+    <li>
+      <h3>Paste one line into your app</h3>
     <div class="stackbar">
       <div class="t-tabs" role="tablist" id="stacks">
         <span class="t-tabs-pill" aria-hidden="true"></span>
@@ -578,7 +680,7 @@ npx laminator init</pre>
         <button class="t-tab" role="tab" aria-selected="false" data-s="django">Django</button>
       </div>
     </div>
-    <div class="snip" data-p="html">
+      <div class="snip" data-p="html">
 <pre><span class="g">&lt;!-- before &lt;/body&gt; --&gt;</span>
 &lt;script src="http://127.0.0.1:7317/client.js"&gt;&lt;/script&gt;</pre></div>
     <div class="snip" data-p="vite" hidden>
@@ -599,23 +701,31 @@ npx laminator init</pre>
 {% if debug %}
   &lt;script src="http://127.0.0.1:7317/client.js"&gt;&lt;/script&gt;
 {% endif %}</pre></div>
-    <div class="snip" style="margin-top:20px">
-<pre>npx laminator          <span class="g"># then open your app, Ctrl/Cmd+Shift+F</span></pre></div>
-  </div>
+      <p class="tiny">Only in development. It talks to a server that can edit your CSS.</p>
+    </li>
+
+    <li>
+      <h3>Run it</h3>
+      <div class="cmd" data-copy="npx laminator">
+<pre><span class="d">$</span> npx laminator</pre>
+      </div>
+      <p class="tiny">Open your app and press <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd>.</p>
+    </li>
+  </ol>
 </section>
 
 <!-- ══ Safety ════════════════════════════════════════════════════════ -->
 <section class="band wrap" style="padding-top:0">
   <div class="narrow reveal t-stagger">
     <p class="eyebrow t-stagger-line t-stagger-line--1">Safety</p>
-    <h2 class="t-stagger-line t-stagger-line--2">It stays on your machine</h2>
+    <h2 class="t-stagger-line t-stagger-line--2">It never leaves your machine</h2>
   </div>
   <div class="narrow rows">
-    <div class="row"><div class="lead">Local only</div><p class="say">Binds to 127.0.0.1. Not 0.0.0.0, so nothing on your network can reach it.</p></div>
-    <div class="row"><div class="lead">No dependencies</div><p class="say">Zero npm packages. Nothing is fetched at install beyond Laminator itself.</p></div>
-    <div class="row"><div class="lead">Token on writes</div><p class="say">Any page you visit can fire a request at localhost. The browser stops it reading the reply, but not sending it, so anything that writes needs a token — and the script carrying that token is only served to localhost.</p></div>
-    <div class="row"><div class="lead">Narrow writes</div><p class="say">The write endpoint takes a file, a line, a property and a value. No free-text writes, and the file has to be one the scan listed.</p></div>
-    <div class="row"><div class="lead">Out of your diffs</div><p class="say"><code>.laminator/</code> ships its own gitignore.</p></div>
+    <div class="row"><div class="lead">Just local</div><p class="say">It listens on 127.0.0.1 only, so nothing else on your network can reach it.</p></div>
+    <div class="row"><div class="lead">Nothing to install</div><p class="say">No npm packages come along with it. What you download is the whole thing.</p></div>
+    <div class="row"><div class="lead">A key for writes</div><p class="say">Any site you visit can quietly poke localhost. Your browser stops it reading the answer, but not asking — so anything that writes needs a key, and only your own pages get one.</p></div>
+    <div class="row"><div class="lead">Small edits only</div><p class="say">Writing takes a file, a line, a property and a value. It can't write anything else, anywhere else.</p></div>
+    <div class="row"><div class="lead">Out of your way</div><p class="say"><code>.laminator/</code> comes with its own gitignore, so it won't turn up in your diffs.</p></div>
   </div>
 </section>
 
@@ -623,45 +733,46 @@ npx laminator init</pre>
 <section class="band wrap" id="faq" style="padding-top:0">
   <div class="narrow center reveal t-stagger">
     <p class="eyebrow t-stagger-line t-stagger-line--1">Questions</p>
-    <h2 class="t-stagger-line t-stagger-line--2" style="margin-bottom:26px">The ones people ask</h2>
+    <h2 class="t-stagger-line t-stagger-line--2" style="margin-bottom:24px">Things people ask</h2>
   </div>
   <div class="narrow" id="faqlist">
     <div class="t-acc" data-open="false">
       <button class="t-acc-head" aria-expanded="false">Do I need an AI agent for this?
         <span class="t-acc-chevron"><svg viewBox="0 0 16 16"><path d="M4 6.5L8 10.5L12 6.5"/></svg></span></button>
       <div class="t-acc-panel"><div class="t-acc-panel-inner">
-        <p>No. Send writes the review file and copies the prompt whatever you have installed.
-        The agent is a convenience, not a requirement.</p></div></div>
+        <p>No. Send writes the file and copies the prompt either way. The agent just saves
+        you a paste.</p></div></div>
     </div>
     <div class="t-acc" data-open="false">
-      <button class="t-acc-head" aria-expanded="false">My project is all Tailwind. Is it useless?
+      <button class="t-acc-head" aria-expanded="false">My project is all Tailwind. Is this any use?
         <span class="t-acc-chevron"><svg viewBox="0 0 16 16"><path d="M4 6.5L8 10.5L12 6.5"/></svg></span></button>
       <div class="t-acc-panel"><div class="t-acc-panel-inner">
-        <p>No, but be clear-eyed. There's no rule to point at, so findings come back marked
-        <code>utility</code> with the class list, the component name and the computed styles.
-        Still a lot more than a screenshot and a sentence.</p></div></div>
+        <p>Some, but less. There's no rule to point at, so you get the class list, the
+        component name and what the browser worked out. Still better than a screenshot
+        and a sentence.</p></div></div>
     </div>
     <div class="t-acc" data-open="false">
-      <button class="t-acc-head" aria-expanded="false">Can I edit CSS from the overlay?
+      <button class="t-acc-head" aria-expanded="false">Can I change the CSS from the box?
         <span class="t-acc-chevron"><svg viewBox="0 0 16 16"><path d="M4 6.5L8 10.5L12 6.5"/></svg></span></button>
       <div class="t-acc-panel"><div class="t-acc-panel-inner">
-        <p>Yes. When a finding has a writable rule the popup lists its declarations. Change one,
-        press Enter, and it goes into the file. Your dev server reloads it. The undo is
-        <code>git diff</code>.</p></div></div>
+        <p>Yes, if the rule is one it can write to. The box lists what the rule says. Change
+        a value, press Enter, and it goes in the file. Your dev server reloads it. To undo,
+        use <code>git diff</code>.</p></div></div>
     </div>
     <div class="t-acc" data-open="false">
-      <button class="t-acc-head" aria-expanded="false">A finding points at the wrong line
+      <button class="t-acc-head" aria-expanded="false">It's pointing at the wrong line
         <span class="t-acc-chevron"><svg viewBox="0 0 16 16"><path d="M4 6.5L8 10.5L12 6.5"/></svg></span></button>
       <div class="t-acc-panel"><div class="t-acc-panel-inner">
-        <p>The stylesheet moved since the last scan. Run <code>laminator scan</code>.</p></div></div>
+        <p>The stylesheet has moved since it last looked. Run <code>laminator scan</code>
+        and it'll catch up.</p></div></div>
     </div>
     <div class="t-acc" data-open="false">
       <button class="t-acc-head" aria-expanded="false">Can it send work to a terminal I've already got open?
         <span class="t-acc-chevron"><svg viewBox="0 0 16 16"><path d="M4 6.5L8 10.5L12 6.5"/></svg></span></button>
       <div class="t-acc-panel"><div class="t-acc-panel-inner">
-        <p>Not really, and no tool can. Nothing types into a running terminal, and Claude Code's
-        <code>--resume</code> on a live session starts a copy of it. So that case is "Copy only",
-        then paste. Laminator says so instead of pretending.</p></div></div>
+        <p>Not really, and nothing can. Nothing types into a terminal that's already running.
+        So for that case it copies the prompt and you paste it. It says so rather than
+        pretending.</p></div></div>
     </div>
   </div>
 </section>
@@ -671,9 +782,9 @@ npx laminator init</pre>
   <div class="wrap">
     <div class="narrow reveal t-stagger">
       <h2 class="t-stagger-line t-stagger-line--1" style="font-size:clamp(30px,4.4vw,50px)">
-        Stop describing UI.<br><span class="grad">Just point at it.</span></h2>
+        From the surface.<br><span class="grad">To the source.</span></h2>
       <p class="lede t-stagger-line t-stagger-line--2" style="margin-top:14px">
-        Free, MIT, and it never leaves your machine.</p>
+        Next time something looks off, just click it.</p>
     </div>
     <div class="narrow dashrule">
       <a class="btn solid" href="#install">Start using it</a>
@@ -687,12 +798,12 @@ npx laminator init</pre>
     <div class="about">
       <img class="on-light" src="assets/logo-light.svg" alt="Laminator" width="319" height="64">
       <img class="on-dark" src="assets/logo-dark.svg" alt="Laminator" width="319" height="64" style="display:none">
-      <p>Visual feedback for coding agents. Runs on your machine and talks to nothing else.</p>
+      <p>Point at what's wrong. Your agent gets the line. Runs on your machine, talks to nothing else.</p>
     </div>
     <div>
       <h5>Product</h5>
-      <a href="#how">How it works</a><a href="#modes">Capture modes</a>
-      <a href="#install">Install</a><a href="#faq">FAQ</a>
+      <a href="#how">How it works</a><a href="#modes">Pointing</a>
+      <a href="#install">Install</a><a href="#faq">Questions</a>
     </div>
     <div>
       <h5>Source</h5>
@@ -718,16 +829,16 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
 const head = document.getElementById('top')
 addEventListener('scroll', () => head.classList.toggle('stuck', scrollY > 8), { passive: true })
 
-// ── Footer logo follows the theme ──────────────────────────────────────
-// The nav pair swaps in CSS, but the footer copies are inside a grid cell
-// where a display rule would fight the layout, so they are set once here.
-const dark = matchMedia('(prefers-color-scheme: dark)')
+// ── Footer logos follow the theme ──────────────────────────────────────
+// The nav pair swaps in CSS. These are inside a grid cell where a display
+// rule fights the layout, so they are set once here instead.
+const darkQ = matchMedia('(prefers-color-scheme: dark)')
 const swapLogos = () => document.querySelectorAll('.foot .about img').forEach((img) => {
-  img.style.display = img.classList.contains('on-dark') === dark.matches ? 'block' : 'none'
+  img.style.display = img.classList.contains('on-dark') === darkQ.matches ? 'block' : 'none'
 })
-swapLogos(); dark.addEventListener('change', swapLogos)
+swapLogos(); darkQ.addEventListener('change', swapLogos)
 
-// ── Texts reveal, played when the block arrives ────────────────────────
+// ── Texts reveal ───────────────────────────────────────────────────────
 requestAnimationFrame(() => document.getElementById('hero').classList.add('is-shown'))
 const io = new IntersectionObserver((entries, obs) => {
   for (const e of entries) {
@@ -738,66 +849,112 @@ const io = new IntersectionObserver((entries, obs) => {
 }, { rootMargin: '0px 0px -12% 0px' })
 document.querySelectorAll('.reveal.t-stagger').forEach((n) => io.observe(n))
 
-// ── Terminal: type the command, then reveal what it actually prints ────
-// The output is the real output of `laminator init`, down to the timings.
-const OUT = [
-  ['d', '  walking the project'],
-  ['d', '  detecting frameworks (853 files)'],
-  ['d', '  reading 20 stylesheets'],
-  ['', ''],
-  ['w', '  bramble-coffee'],
-  ['', '  framework   <span class="bl">vite</span>'],
-  ['', '  styling     <span class="bl">tailwind, stylesheets</span>'],
-  ['', '  scanned     853 files in <span class="p">104ms</span>'],
-  ['', '  stylesheets <span class="p">20</span> editable, 4295 rules indexed'],
-  ['', ''],
-  ['d', '  add to your app:'],
-  ['w', '  &lt;script src="http://127.0.0.1:7317/client.js"&gt;&lt;/script&gt;'],
-]
-const termOut = document.getElementById('termout')
-const CMD = 'npx laminator init'
-
-function runTerminal() {
-  termOut.innerHTML = '<span class="ln on"><span class="p">$</span> <span id="typed"></span><span class="cur"></span></span>'
-  const typed = document.getElementById('typed')
-  if (reduce) {
-    typed.textContent = CMD
-    OUT.forEach(([cls, html]) => {
-      const el = document.createElement('span')
-      el.className = 'ln on' + (cls ? ' ' + cls : '')
-      el.innerHTML = html || '&nbsp;'
-      termOut.appendChild(el)
-    })
-    return
-  }
-  let i = 0
-  const tick = setInterval(() => {
-    typed.textContent = CMD.slice(0, ++i)
-    if (i < CMD.length) return
-    clearInterval(tick)
-    OUT.forEach(([cls, html], n) => {
-      const el = document.createElement('span')
-      el.className = 'ln' + (cls ? ' ' + cls : '')
-      el.innerHTML = html || '&nbsp;'
-      termOut.appendChild(el)
-      setTimeout(() => el.classList.add('on'), 320 + n * 115)
-    })
-  }, 52)
+// ══ The try-it demo ════════════════════════════════════════════════════
+// Every value below is what Laminator would really report for that element in
+// the demo project the tests use — same stylesheets, same line numbers. The
+// point of a live demo is lost if the numbers in it are made up.
+const PICKS = {
+  title: { path: 'main > h1.hero-title', file: 'styles/site.css', line: 22, kin: 1,  say: 'this heading is too tight' },
+  sub:   { path: 'main > p.hero-sub',    file: 'styles/site.css', line: 23, kin: 1,  say: 'reads a bit flat' },
+  name:  { path: 'article.bean-card > h2.bean-name',  file: 'styles/cards.css', line: 3, kin: 3, say: 'these cards feel cramped' },
+  note:  { path: 'article.bean-card > p.bean-note',   file: 'styles/cards.css', line: 4, kin: 3, say: 'too pale to read' },
+  price: { path: 'article.bean-card > span.bean-price', file: 'styles/cards.css', line: 5, kin: 3, say: 'price should stand out more' },
+  cta:   { path: 'main > button.cta',    file: 'styles/site.css', line: 30, kin: 1,  say: 'button sits too close to the grid' },
 }
-new IntersectionObserver((e, obs) => {
-  if (!e[0].isIntersecting) return
-  obs.disconnect()
-  runTerminal()
-}, { threshold: .35 }).observe(document.getElementById('term'))
 
-// ── Marquee: duplicate the row so the loop has no seam ─────────────────
-// translateX(-100%) moves exactly one copy's width, so a second identical
-// copy is what makes the wrap invisible. Without it the row snaps back.
+const stage = document.getElementById('stage')
+const hint = document.getElementById('hint')
+const done = document.getElementById('done')
+let card = null, pin = null, picked = null
+
+function clearPick() {
+  if (card) { card.remove(); card = null }
+  if (pin) { pin.remove(); pin = null }
+  if (picked) { picked.classList.remove('chosen'); picked = null }
+  stage.classList.add('armed')
+}
+
+function pick(el) {
+  const info = PICKS[el.dataset.pick]
+  if (!info) return
+  clearPick()
+  picked = el
+  el.classList.add('chosen')
+  // While a card is open the other elements stop offering themselves, so the
+  // hover outline does not chase the pointer across a panel you are reading.
+  stage.classList.remove('armed')
+  hint.classList.add('gone')
+
+  const s = stage.getBoundingClientRect()
+  const r = el.getBoundingClientRect()
+
+  pin = document.createElement('span')
+  pin.className = 'dpin'
+  pin.textContent = '1'
+  pin.style.left = (r.left - s.left + r.width / 2) + 'px'
+  pin.style.top = (r.top - s.top) + 'px'
+  stage.appendChild(pin)
+  requestAnimationFrame(() => pin.classList.add('in'))
+
+  card = document.createElement('div')
+  card.className = 'note-card'
+  card.innerHTML =
+    '<div class="h">Annotate element<em title="Close">&times;</em></div>' +
+    '<div class="b">' +
+      '<div class="path">' + info.path + '<b>' + info.file.split('/').pop() + ':' + info.line + '</b>' +
+        (info.kin > 1 ? '<i>this rule also moves ' + info.kin + ' others</i>' : '') +
+      '</div>' +
+      '<input class="in" value="' + info.say + '" readonly aria-label="Comment">' +
+      '<div class="chips"><span class="on">fix</span><span>change</span><span>question</span></div>' +
+    '</div>'
+  stage.appendChild(card)
+
+  // Keep the card inside the stage: anchored under the element, nudged left if
+  // it would hang off the right edge, flipped above if it would fall out below.
+  const w = 272
+  let x = r.left - s.left
+  let y = r.bottom - s.top + 10
+  x = Math.min(Math.max(12, x), s.width - w - 12)
+  if (y + card.offsetHeight > s.height - 8) y = Math.max(10, r.top - s.top - card.offsetHeight - 10)
+  card.style.left = x + 'px'
+  card.style.top = y + 'px'
+  requestAnimationFrame(() => card.classList.add('in'))
+
+  done.innerHTML = 'That’s it. Your agent gets <b>' + info.file + ':' + info.line +
+    '</b>, what the rule says now, and how many other things it would move. ' +
+    '<a id="again">Try another</a>'
+  document.getElementById('again').addEventListener('click', () => {
+    clearPick(); done.textContent = ''; hint.classList.remove('gone')
+  })
+  card.querySelector('em').addEventListener('click', () => {
+    clearPick(); done.textContent = ''; hint.classList.remove('gone')
+  })
+}
+
+stage.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-pick]')
+  if (el) return pick(el)
+  if (!e.target.closest('.note-card')) { clearPick(); done.textContent = ''; hint.classList.remove('gone') }
+})
+// Keyboard: the demo is a real control, so it answers to one.
+document.querySelectorAll('[data-pick]').forEach((el) => {
+  el.tabIndex = 0
+  el.setAttribute('role', 'button')
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(el) }
+  })
+})
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && card) { clearPick(); done.textContent = ''; hint.classList.remove('gone') } })
+addEventListener('resize', () => { if (picked) pick(picked) })
+
+// ── Marquee: cloned so the wrap has no seam ────────────────────────────
+// translateX(-100%) moves exactly one copy's width, so the second copy is what
+// hides the jump back to the start.
 const marq = document.getElementById('marq')
 marq.appendChild(marq.firstElementChild.cloneNode(true))
 marq.lastElementChild.setAttribute('aria-hidden', 'true')
 
-// ── Number tickers ─────────────────────────────────────────────────────
+// ── Counters ───────────────────────────────────────────────────────────
 const nio = new IntersectionObserver((entries, obs) => {
   for (const e of entries) {
     if (!e.isIntersecting) continue
@@ -808,8 +965,7 @@ const nio = new IntersectionObserver((entries, obs) => {
     const start = performance.now()
     const step = (now) => {
       const t = Math.min(1, (now - start) / 900)
-      // easeOutExpo, so it arrives rather than crawls
-      const v = t === 1 ? 1 : 1 - Math.pow(2, -10 * t)
+      const v = t === 1 ? 1 : 1 - Math.pow(2, -10 * t)   // easeOutExpo: arrives, does not crawl
       e.target.textContent = Math.round(to * v) + suffix
       if (t < 1) requestAnimationFrame(step)
     }
@@ -825,9 +981,9 @@ const tabs = [...bar.querySelectorAll('.t-tab')]
 function movePill(animate) {
   const on = bar.querySelector('.t-tab[aria-selected="true"]')
   if (!on) return
-  // The first write of each layout suspends the transition. The pill rests at
-  // translateX(0) with width 0, so without this it visibly grows out of the
-  // left edge from a state the reader never saw.
+  // The first write of a layout suspends the transition. The pill rests at
+  // translateX(0) with width 0, so without this it grows out of the left edge
+  // from a state nobody saw.
   if (!animate) pill.style.transition = 'none'
   pill.style.transform = `translateX(${on.offsetLeft - bar.clientLeft}px)`
   pill.style.width = `${on.offsetWidth}px`
@@ -852,19 +1008,31 @@ document.querySelectorAll('#faqlist .t-acc').forEach((acc) => {
   })
 })
 
-// ── Copy, with the check drawing itself ────────────────────────────────
-const btn = document.getElementById('copy')
-const icon = document.getElementById('copyicon')
-const tick = document.getElementById('tick')
-btn.addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(document.getElementById('cmd').textContent.trim()) } catch {}
-  icon.style.opacity = '0'
-  // Remove, force a reflow, re-add — without the reflow the browser coalesces
-  // both writes and the animation never replays on a second click.
-  tick.removeAttribute('data-state')
-  void tick.offsetWidth
-  tick.setAttribute('data-state', 'in')
-  setTimeout(() => { icon.style.opacity = ''; tick.removeAttribute('data-state') }, 1700)
+// ── Copy ───────────────────────────────────────────────────────────────
+// ── Copy, on every command block ──────────────────────────────────────
+const COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+  'stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2.5"/>' +
+  '<path d="M6 15H5a2 2 0 01-2-2V5a2 2 0 012-2h8a2 2 0 012 2v1"/></svg>'
+const DONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" ' +
+  'stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5L10 17.5L19 7"/></svg>'
+document.querySelectorAll('.cmd').forEach((box) => {
+  const b = document.createElement('button')
+  b.className = 'cp'
+  b.type = 'button'
+  b.setAttribute('aria-label', 'Copy')
+  b.title = 'Copy'
+  b.innerHTML = COPY
+  box.appendChild(b)
+  let back = null
+  b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(box.dataset.copy) } catch {}
+    b.innerHTML = DONE
+    b.classList.add('done')
+    // One timer per button, reset on every click, so hammering it does not
+    // leave the tick behind after the last one fires.
+    clearTimeout(back)
+    back = setTimeout(() => { b.innerHTML = COPY; b.classList.remove('done') }, 1600)
+  })
 })
 </script>
 </body>
