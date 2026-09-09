@@ -1,0 +1,16 @@
+<!--
+  Laminator's mark: two sheets pressed together.
+
+  That is what laminating is, and it is what the tool does — it bonds the thing
+  you can see to the source that makes it. The lower sheet is the running page,
+  the upper one is the code, and where they overlap the colour lifts, because
+  the overlap is the whole point. The dot is where you clicked.
+
+  Two shapes and one dot, so it survives being 16 pixels wide in a browser tab.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Laminator">
+  <rect width="48" height="48" rx="11" fill="#0B0D12"/>
+  <rect x="7" y="17" width="25" height="23" rx="6" fill="#2F6DF6"/>
+  <rect x="16" y="8" width="25" height="23" rx="6" fill="#F4F6FB" opacity=".93"/>
+  <circle cx="28.5" cy="24" r="3.1" fill="#2F6DF6"/>
+</svg>

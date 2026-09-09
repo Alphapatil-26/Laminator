@@ -3,344 +3,597 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Laminator — visual feedback for coding agents</title>
-<meta name="description" content="Point at anything in your running app and hand a coding agent the file and line that paints it. Entirely local, zero dependencies.">
+<title>Laminator — click the thing that's wrong</title>
+<meta name="description" content="Click the element that looks wrong. Laminator tells your coding agent which file and line paints it. Runs on your machine, no dependencies.">
 <meta property="og:title" content="Laminator">
-<meta property="og:description" content="Point at anything in your running app and hand a coding agent the file:line that paints it.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232f6df6'/%3E%3Ccircle cx='16' cy='16' r='5' fill='white'/%3E%3C/svg%3E">
+<meta property="og:description" content="Click the element that looks wrong. Your agent gets the file and the line number.">
+<meta name="theme-color" content="#0B0D12">
+<link rel="icon" href="mark.svg" type="image/svg+xml">
 <style>
+/* ── Tokens ─────────────────────────────────────────────────────────────
+   Light first, dark redefined. Every colour is declared in the bare :root
+   so nothing can only exist inside a media query. */
 :root{
-  --ink:#16181d; --dim:#5a6070; --faint:#8b91a0; --line:#e6e8ec;
-  --paper:#fff; --sub:#f7f8fa; --blue:#2f6df6; --code:#0f1115;
-  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --ink:#0b0d12; --body:#4a5060; --soft:#868da0; --hair:#e9ebf0;
+  --bg:#fff; --raise:#f6f7f9; --deep:#0b0d12; --deep-ink:#e9ecf4;
+  --blue:#2f6df6; --blue-soft:rgba(47,109,246,.1);
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Inter,system-ui,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --shell:rgba(255,255,255,.72);
+
+  /* transitions.dev — texts reveal */
+  --stagger-dur:500ms; --stagger-distance:12px; --stagger-stagger:40ms;
+  --stagger-blur:3px; --stagger-ease:cubic-bezier(0.22, 1, 0.36, 1);
+  /* transitions.dev — tabs sliding */
+  --tabs-dur:250ms; --tabs-ease:cubic-bezier(0.22, 1, 0.36, 1);
+  --tabs-text-muted:rgba(74,80,96,.85); --tabs-text-active:#0b0d12;
+  --tabs-bar-bg:#eef0f4; --tabs-pill-bg:#fff;
+  /* transitions.dev — accordion */
+  --acc-expand:250ms; --acc-collapse:250ms; --acc-chevron:250ms;
+  --acc-ease:cubic-bezier(0.22, 1, 0.36, 1);
+  /* transitions.dev — success check */
+  --check-opacity-dur:500ms; --check-rotate-dur:500ms; --check-rotate-from:80deg;
+  --check-bob-dur:500ms; --check-y-amount:40px; --check-blur-dur:500ms;
+  --check-blur-from:10px; --check-path-dur:500ms; --check-path-delay:80ms;
+  --check-ease-out:cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-opacity:cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-rotate:cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-bob:cubic-bezier(0.34, 1.35, 0.64, 1);
+  --check-ease-path:cubic-bezier(0.22, 1, 0.36, 1);
 }
 @media (prefers-color-scheme:dark){
-  :root{ --ink:#e8eaf0; --dim:#9aa1b2; --faint:#6c7383; --line:#252932;
-    --paper:#0e1014; --sub:#14171d; --code:#080a0d; }
+  :root{
+    --ink:#f2f4f9; --body:#a4abbd; --soft:#6f7788; --hair:#1d2029;
+    --bg:#0b0d12; --raise:#12151c; --deep:#05070a; --deep-ink:#e9ecf4;
+    --blue-soft:rgba(47,109,246,.16);
+    --tabs-text-muted:rgba(164,171,189,.85); --tabs-text-active:#f2f4f9;
+    --tabs-bar-bg:#181c24; --tabs-pill-bg:#2a303c;
+    --shell:rgba(11,13,18,.72);
+  }
 }
+
 *{box-sizing:border-box}
-html{scroll-behavior:smooth; scroll-padding-top:24px}
-body{margin:0;background:var(--paper);color:var(--ink);
-  font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif;
-  -webkit-font-smoothing:antialiased}
+html{scroll-behavior:smooth;scroll-padding-top:90px;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased;letter-spacing:-.011em}
 a{color:inherit}
-.wrap{display:grid;grid-template-columns:232px minmax(0,1fr);gap:56px;max-width:1080px;margin:0 auto;padding:56px 32px 120px}
-nav{position:sticky;top:56px;align-self:start;height:max-content}
-.mark{font:italic 700 26px/1 Georgia,serif;color:var(--blue);margin:0 0 28px;letter-spacing:-.01em}
-nav h4{margin:24px 0 8px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);font-weight:600}
-nav a{display:block;padding:5px 0;color:var(--dim);text-decoration:none;font-size:14.5px}
-nav a:hover{color:var(--ink)}
-nav a.on{color:var(--ink);font-weight:600}
-nav .v{margin-top:28px;font-size:12px;color:var(--faint);font-family:var(--mono)}
-h1{font-size:44px;line-height:1.06;letter-spacing:-.025em;margin:0 0 8px;font-weight:700}
-h1 .hl{background:linear-gradient(180deg,transparent 58%,rgb(47 109 246/22%) 58%);padding:0 2px}
-h2{font-size:24px;letter-spacing:-.015em;margin:56px 0 14px;padding-top:14px;border-top:1px solid var(--line);font-weight:650}
-h2:first-of-type{border-top:0;padding-top:0}
-h3{font-size:16.5px;margin:28px 0 8px;font-weight:650}
-p{margin:0 0 14px;color:var(--dim)}
-p strong,li strong{color:var(--ink);font-weight:600}
-.lede{font-size:18.5px;line-height:1.55;color:var(--dim);max-width:62ch}
-code{font-family:var(--mono);font-size:.88em;background:var(--sub);border:1px solid var(--line);
-  border-radius:5px;padding:1px 5px}
-pre{background:var(--code);color:#e8eaf0;border-radius:12px;padding:16px 18px;overflow:auto;
-  font-family:var(--mono);font-size:13.5px;line-height:1.6;margin:0 0 16px}
-pre code{background:none;border:0;padding:0;font-size:inherit;color:inherit}
-pre .c{color:#6c7383}
-pre .k{color:#7aa2f7}
-pre .s{color:#9ece6a}
-ul,ol{margin:0 0 16px;padding-left:22px;color:var(--dim)}
-li{margin:6px 0}
-table{width:100%;border-collapse:collapse;margin:0 0 18px;font-size:14.5px}
-th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
-th{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);font-weight:600}
-td{color:var(--dim)}
-td:first-child{color:var(--ink);white-space:nowrap}
-.pill{display:inline-block;font-size:11px;font-family:var(--mono);background:var(--sub);
-  border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--dim);margin-left:6px;vertical-align:middle}
-.install{display:flex;align-items:center;gap:10px;background:var(--sub);border:1px solid var(--line);
-  border-radius:10px;padding:10px 14px;font-family:var(--mono);font-size:13.5px;margin:0 0 28px;width:max-content;max-width:100%}
-.install button{border:0;background:none;color:var(--faint);cursor:pointer;font-size:13px;padding:2px 4px}
-.install button:hover{color:var(--ink)}
-.note{background:var(--sub);border:1px solid var(--line);border-left:3px solid var(--blue);
-  border-radius:0 10px 10px 0;padding:13px 16px;margin:0 0 18px}
-.note p{margin:0;font-size:14.5px}
-.note.warn{border-left-color:#f59e0b}
-.steps{counter-reset:s;list-style:none;padding:0}
-.steps li{counter-increment:s;position:relative;padding-left:30px;margin:10px 0;color:var(--ink)}
-.steps li::before{content:counter(s);position:absolute;left:0;top:1px;width:20px;height:20px;
-  border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;
-  display:grid;place-items:center}
-.steps li span{color:var(--dim);font-weight:400}
-.shot{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:0 0 28px;background:var(--sub)}
-.shot .chrome{display:flex;align-items:center;gap:6px;padding:10px 14px;border-bottom:1px solid var(--line)}
-.shot .chrome i{width:10px;height:10px;border-radius:50%;background:var(--line);display:block}
-.shot .chrome b{flex:1;text-align:center;font:12px var(--mono);color:var(--faint);font-weight:400}
-.shot .body{padding:22px;font-family:var(--mono);font-size:12.5px;color:var(--dim);white-space:pre-wrap;line-height:1.7}
-footer{grid-column:1/-1;margin-top:80px;padding-top:24px;border-top:1px solid var(--line);
-  color:var(--faint);font-size:13.5px;display:flex;gap:18px;flex-wrap:wrap}
-footer a{text-decoration:none}
-footer a:hover{color:var(--ink)}
-@media (max-width:860px){
-  .wrap{grid-template-columns:1fr;gap:0;padding:32px 20px 80px}
-  nav{position:static;margin-bottom:36px}
-  nav h4{margin-top:16px}
-  h1{font-size:34px}
+img,svg{max-width:100%}
+
+/* ── Nav ─────────────────────────────────────────────────────────────── */
+header{position:sticky;top:0;z-index:50;background:var(--shell);
+  backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid transparent;transition:border-color .3s ease}
+header.stuck{border-bottom-color:var(--hair)}
+.nav{max-width:1000px;margin:0 auto;padding:0 24px;height:56px;display:flex;align-items:center;gap:22px}
+.brand{display:flex;align-items:center;gap:9px;text-decoration:none;font-weight:600;font-size:16px;
+  letter-spacing:-.02em;margin-right:auto}
+.brand svg{width:24px;height:24px;border-radius:6px}
+.nav a.lnk{text-decoration:none;color:var(--body);font-size:14px;letter-spacing:-.005em}
+.nav a.lnk:hover{color:var(--ink)}
+@media (max-width:720px){ .nav a.lnk.hide{display:none} }
+
+/* ── Layout ──────────────────────────────────────────────────────────── */
+section{max-width:1000px;margin:0 auto;padding:0 24px}
+.band{padding:104px 0}
+.band+.band{padding-top:0}
+.mid{max-width:660px;margin:0 auto}
+.center{text-align:center}
+
+h1{font-size:clamp(42px,7vw,68px);line-height:1.03;letter-spacing:-.035em;font-weight:650;margin:0}
+h2{font-size:clamp(28px,4vw,38px);line-height:1.12;letter-spacing:-.028em;font-weight:650;margin:0 0 14px}
+h3{font-size:19px;letter-spacing:-.018em;font-weight:600;margin:0 0 6px}
+p{margin:0 0 18px;color:var(--body)}
+.big{font-size:20px;line-height:1.55;color:var(--body)}
+.eyebrow{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--blue);margin:0 0 14px}
+strong{color:var(--ink);font-weight:600}
+code{font-family:var(--mono);font-size:.87em;background:var(--raise);border-radius:5px;padding:2px 6px}
+
+.hero{padding:88px 0 64px}
+.hero h1 .dim{color:var(--soft)}
+.hero .big{margin:20px auto 0;max-width:560px}
+
+/* ── Buttons ─────────────────────────────────────────────────────────── */
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:34px}
+.btn{display:inline-flex;align-items:center;gap:8px;height:46px;padding:0 22px;border-radius:23px;
+  text-decoration:none;font-size:15px;font-weight:550;border:1px solid transparent;cursor:pointer;
+  font-family:inherit;transition:transform .22s cubic-bezier(0.22,1,0.36,1),background .22s ease}
+.btn:active{transform:scale(.97)}
+.btn.solid{background:var(--blue);color:#fff}
+.btn.solid:hover{background:#4680ff}
+.btn.ghost{border-color:var(--hair);color:var(--ink);background:var(--bg)}
+.btn.ghost:hover{background:var(--raise)}
+
+.copyline{display:inline-flex;align-items:center;gap:12px;margin-top:26px;padding:11px 14px 11px 18px;
+  border:1px solid var(--hair);border-radius:14px;background:var(--raise);font-family:var(--mono);
+  font-size:14px;color:var(--ink)}
+.copyline button{border:0;background:none;cursor:pointer;color:var(--soft);padding:4px;display:grid;
+  place-items:center;width:26px;height:26px;position:relative}
+.copyline button:hover{color:var(--ink)}
+.copyline .tick{position:absolute;inset:0;display:grid;place-items:center;color:#16a34a}
+
+/* ── The window ──────────────────────────────────────────────────────── */
+.frame{margin:56px auto 0;max-width:880px;border-radius:18px;overflow:hidden;background:var(--deep);
+  border:1px solid var(--hair);box-shadow:0 30px 70px -30px rgba(11,13,18,.5)}
+.frame .top{display:flex;align-items:center;gap:7px;padding:13px 16px;background:#14171f}
+.frame .top i{width:11px;height:11px;border-radius:50%;background:#2d323d;display:block}
+.frame .top b{flex:1;text-align:center;font:12.5px var(--mono);color:#5d6473;font-weight:400}
+.frame pre{margin:0;padding:26px 24px;overflow:auto;font-family:var(--mono);font-size:13.5px;
+  line-height:1.75;color:#c3cad9;
+  /* The hero centres its children; code must not inherit that. */
+  text-align:left}
+.frame pre .k{color:#f2f4f9;font-weight:600}
+.frame pre .b{color:#7aa2f7}
+.frame pre .g{color:#5d6473}
+
+/* ── Grid ────────────────────────────────────────────────────────────── */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:12px;margin-top:44px}
+.card{padding:22px;border:1px solid var(--hair);border-radius:16px;background:var(--raise)}
+.card p{margin:0;font-size:15px;line-height:1.55}
+.card .key{display:inline-block;font-family:var(--mono);font-size:11px;background:var(--bg);
+  border:1px solid var(--hair);border-radius:5px;padding:1px 6px;color:var(--soft);margin-left:6px}
+
+/* ── Tabs (transitions.dev 16) ───────────────────────────────────────── */
+.stackbar{display:flex;justify-content:center;margin:0 0 22px}
+.t-tabs{position:relative;display:inline-flex;align-items:center;gap:3px;padding:3px;border-radius:48px;
+  background:var(--tabs-bar-bg)}
+.t-tab{position:relative;appearance:none;border:0;background:transparent;height:30px;padding:4px 12px;
+  color:var(--tabs-text-muted);cursor:pointer;border-radius:48px;z-index:1;
+  transition:color var(--tabs-dur) var(--tabs-ease)}
+.t-tab:not([aria-selected="true"]):hover,.t-tab[aria-selected="true"]{color:var(--tabs-text-active)}
+.t-tabs-pill{position:absolute;top:3px;left:0;height:30px;width:0;background:var(--tabs-pill-bg);
+  border-radius:48px;transform:translateX(0);
+  transition:transform var(--tabs-dur) var(--tabs-ease),width var(--tabs-dur) var(--tabs-ease);
+  will-change:transform,width;z-index:0;pointer-events:none}
+@media (prefers-reduced-motion:reduce){ .t-tabs-pill,.t-tab{transition:none !important} }
+.t-tab{font-family:inherit;font-size:13.5px;font-weight:500}
+.t-tabs-pill{box-shadow:0 1px 3px rgba(11,13,18,.14)}
+
+.snip{border:1px solid var(--hair);border-radius:14px;background:var(--raise);overflow:hidden}
+.snip pre{margin:0;padding:18px 20px;overflow:auto;font-family:var(--mono);font-size:13.5px;
+  line-height:1.7;color:var(--ink);text-align:left}
+.snip pre .g{color:var(--soft)}
+.snip[hidden]{display:none}
+
+/* ── Accordion (transitions.dev 21) ──────────────────────────────────── */
+.t-acc{border-top:1px solid var(--hair)}
+.t-acc:last-of-type{border-bottom:1px solid var(--hair)}
+.t-acc-head{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;
+  padding:20px 2px;border:0;background:none;cursor:pointer;font-family:inherit;font-size:17px;
+  font-weight:550;letter-spacing:-.015em;color:var(--ink);text-align:left}
+.t-acc-panel{display:grid;grid-template-rows:0fr;
+  transition:grid-template-rows var(--acc-collapse) var(--acc-ease)}
+.t-acc[data-open="true"] .t-acc-panel{grid-template-rows:1fr;
+  transition:grid-template-rows var(--acc-expand) var(--acc-ease)}
+.t-acc-panel-inner{overflow:hidden;opacity:0;filter:blur(2px);
+  transition:opacity var(--acc-collapse) var(--acc-ease),filter var(--acc-collapse) var(--acc-ease)}
+.t-acc[data-open="true"] .t-acc-panel-inner{opacity:1;filter:blur(0);
+  transition:opacity var(--acc-expand) var(--acc-ease),filter var(--acc-expand) var(--acc-ease)}
+.t-acc-chevron{display:inline-flex;transform:scaleY(1);transform-origin:center;
+  transition:transform var(--acc-chevron) var(--acc-ease)}
+.t-acc-chevron path{vector-effect:non-scaling-stroke}
+.t-acc[data-open="true"] .t-acc-chevron{transform:scaleY(-1)}
+@media (prefers-reduced-motion:reduce){
+  .t-acc-panel,.t-acc-panel-inner,.t-acc-chevron{transition:none !important}
 }
+.t-acc-chevron svg{width:15px;height:15px;fill:none;stroke:var(--soft);stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+.t-acc-panel-inner p{padding:0 2px 22px;margin:0;max-width:60ch}
+
+/* ── Success check (transitions.dev 10) ──────────────────────────────── */
+.t-success-check{display:inline-block;transform-origin:center;opacity:0;
+  will-change:transform,opacity,filter}
+.t-success-check svg{display:block;overflow:visible}
+.t-success-check svg path{stroke-dasharray:20;stroke-dashoffset:20}
+.t-success-check[data-state="in"]{
+  animation:t-check-fade var(--check-opacity-dur) var(--check-ease-opacity) forwards,
+    t-check-rotate var(--check-rotate-dur) var(--check-ease-rotate) forwards,
+    t-check-blur var(--check-blur-dur) var(--check-ease-out) forwards,
+    t-check-bob var(--check-bob-dur) var(--check-ease-bob) forwards}
+.t-success-check[data-state="in"] svg path{
+  animation:t-check-draw var(--check-path-dur) var(--check-ease-path) var(--check-path-delay,0ms) forwards}
+@keyframes t-check-fade{from{opacity:0}to{opacity:1}}
+@keyframes t-check-rotate{from{transform:rotate(var(--check-rotate-from))}to{transform:rotate(0deg)}}
+@keyframes t-check-blur{from{filter:blur(var(--check-blur-from))}to{filter:blur(0)}}
+@keyframes t-check-bob{from{translate:0 var(--check-y-amount)}to{translate:0 0}}
+@keyframes t-check-draw{to{stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){
+  .t-success-check{animation:none !important;opacity:1}
+  .t-success-check svg path{animation:none !important;stroke-dashoffset:0 !important}
+}
+
+/* ── Texts reveal (transitions.dev 18) ───────────────────────────────── */
+.t-stagger-line{display:block;opacity:0;transform:translateY(var(--stagger-distance));
+  filter:blur(var(--stagger-blur));
+  transition:opacity var(--stagger-dur) var(--stagger-ease),
+    transform var(--stagger-dur) var(--stagger-ease),
+    filter var(--stagger-dur) var(--stagger-ease);
+  will-change:transform,opacity,filter}
+.t-stagger-line--2{transition-delay:var(--stagger-stagger)}
+.t-stagger-line--3{transition-delay:calc(var(--stagger-stagger) * 2)}
+.t-stagger-line--4{transition-delay:calc(var(--stagger-stagger) * 3)}
+.t-stagger.is-shown .t-stagger-line{opacity:1;transform:translateY(0);filter:blur(0)}
+.t-stagger.is-hiding .t-stagger-line{opacity:0;transform:translateY(0);filter:blur(0);
+  transition:opacity 200ms ease,transform 0s linear,filter 0s linear;transition-delay:0s}
+@media (prefers-reduced-motion:reduce){ .t-stagger-line{transition:none !important} }
+
+/* ── Bits ────────────────────────────────────────────────────────────── */
+.rule{height:1px;background:var(--hair);border:0;margin:0}
+.rows{margin-top:38px}
+.row{display:flex;gap:20px;padding:20px 0;border-top:1px solid var(--hair)}
+.row:first-child{border-top:0}
+.row .lead{flex:0 0 168px;font-weight:550;letter-spacing:-.015em}
+.row .say{flex:1;color:var(--body);font-size:15.5px;margin:0}
+@media (max-width:640px){ .row{flex-direction:column;gap:5px} .row .lead{flex:none} }
+
+.callout{margin-top:34px;padding:20px 22px;border-radius:14px;background:var(--blue-soft);
+  border:1px solid rgba(47,109,246,.18)}
+.callout p{margin:0;font-size:15.5px;color:var(--ink)}
+
+footer{border-top:1px solid var(--hair);margin-top:104px}
+.foot{max-width:1000px;margin:0 auto;padding:34px 24px 60px;display:flex;gap:20px;flex-wrap:wrap;
+  align-items:center;font-size:14px;color:var(--soft)}
+.foot a{text-decoration:none}
+.foot a:hover{color:var(--ink)}
+.foot .sp{margin-left:auto}
 </style>
 </head>
 <body>
-<div class="wrap">
 
-<nav>
-  <div class="mark">Laminator</div>
-  <a href="#overview" class="on">Overview</a>
-  <a href="#install">Install</a>
-  <a href="#modes">Capture modes</a>
-  <a href="#anchor">What it can anchor</a>
-  <a href="#handoff">Handing off</a>
-  <a href="#output">Output</a>
-  <a href="#schema">Schema <span class="pill">AFS 1.1</span></a>
-  <h4>Tools</h4>
-  <a href="#cli">CLI</a>
-  <a href="#api">HTTP API</a>
-  <a href="#config">Config</a>
-  <h4>Resources</h4>
-  <a href="#privacy">Privacy</a>
-  <a href="#faq">FAQ</a>
-  <a href="https://github.com/Alphapatil-26/Laminator">GitHub &#8599;</a>
-  <div class="v">v0.1.0 · MIT</div>
-</nav>
+<header id="top">
+  <nav class="nav">
+    <a class="brand" href="#top">
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <rect width="48" height="48" rx="11" fill="#0B0D12"/>
+        <rect x="7" y="17" width="25" height="23" rx="6" fill="#2F6DF6"/>
+        <rect x="16" y="8" width="25" height="23" rx="6" fill="#F4F6FB" opacity=".93"/>
+        <circle cx="28.5" cy="24" r="3.1" fill="#2F6DF6"/>
+      </svg>
+      Laminator
+    </a>
+    <a class="lnk" href="#install">Install</a>
+    <a class="lnk hide" href="#point">Pointing</a>
+    <a class="lnk hide" href="#handoff">Handoff</a>
+    <a class="lnk hide" href="#safe">Safety</a>
+    <a class="lnk" href="https://github.com/Alphapatil-26/Laminator">GitHub</a>
+  </nav>
+</header>
 
-<main>
+<!-- ── Hero ─────────────────────────────────────────────────────────── -->
+<section class="hero center">
+  <div class="t-stagger" id="hero">
+    <h1 class="t-stagger-line t-stagger-line--1">Point at the bug.</h1>
+    <h1 class="t-stagger-line t-stagger-line--2 dim" style="color:var(--soft)">Get the line number.</h1>
+    <p class="big t-stagger-line t-stagger-line--3">
+      That heading that sits too tight. Click it, say what's wrong, and Laminator
+      hands your coding agent <code>cards.css:3</code> — plus what the rule says now
+      and how many other things it would move.
+    </p>
+    <div class="cta t-stagger-line t-stagger-line--4">
+      <a class="btn solid" href="#install">Get started</a>
+      <a class="btn ghost" href="https://github.com/Alphapatil-26/Laminator">View source</a>
+    </div>
+  </div>
 
-<h1 id="overview"><span class="hl">Visual feedback.</span><br>For agents.</h1>
-<p class="lede">Laminator turns a click on your running app into structured context an AI coding
-agent can act on — the exact <strong>file and line</strong> that paints the thing you pointed at,
-what the rule currently declares, and how many other elements it moves.</p>
+  <div class="copyline" id="copybox">
+    <span id="cmd">npm i -D laminator</span>
+    <button id="copy" aria-label="Copy install command" title="Copy">
+      <svg id="copyicon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M6 15H5a2 2 0 01-2-2V5a2 2 0 012-2h8a2 2 0 012 2v1"/>
+      </svg>
+      <span class="t-success-check" id="tick" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12.5L10 17.5L19 7"/>
+        </svg>
+      </span>
+    </button>
+  </div>
 
-<div class="install"><span>npm i -D laminator</span><button onclick="navigator.clipboard.writeText('npm i -D laminator')" title="Copy">⧉</button></div>
+  <div class="frame">
+    <div class="top"><i></i><i></i><i></i><b>.laminator/review-2026-09-09.md</b></div>
+<pre><span class="k">## Annotation #1 — h2</span>
 
-<div class="shot">
-  <div class="chrome"><i></i><i></i><i></i><b>localhost:5173</b></div>
-  <div class="body">## Annotation #1 — h2
+<span class="b">**Feedback:**</span> these cards feel cramped
+<span class="b">**Intent:**</span> fix · <span class="b">**Severity:**</span> important
 
-<strong style="color:var(--ink)">Feedback:</strong> these cards feel cramped
-<strong style="color:var(--ink)">Intent:</strong> fix · <strong style="color:var(--ink)">Severity:</strong> important
+<span class="b">**Rule:**</span> `.bean-name` — styles/cards.css:3
+<span class="b">**Applies to:**</span> 3 elements on this page — an edit here moves all of them
 
-<strong style="color:var(--ink)">Rule:</strong> `.bean-name` — styles/cards.css:3
-<strong style="color:var(--ink)">Applies to:</strong> 3 elements on this page — an edit here moves all of them
+<span class="b">**Where:**</span> section.card-grid &gt; article.bean-card &gt; h2.bean-name
+<span class="b">**Computed:**</span> font-size: 19px; margin: 0px 0px 4px; line-height: 26.6px
+<span class="g">&lt;sub&gt;id `ann_m1x9q_4f2a`&lt;/sub&gt;</span></pre>
+  </div>
+</section>
 
-<strong style="color:var(--ink)">Where:</strong> section.card-grid &gt; article.bean-card &gt; h2.bean-name
-<strong style="color:var(--ink)">Computed:</strong> font-size: 19px; margin: 0px 0px 4px; line-height: 26.6px</div>
-</div>
+<!-- ── Why ──────────────────────────────────────────────────────────── -->
+<section class="band">
+  <div class="mid center reveal t-stagger">
+    <p class="eyebrow t-stagger-line t-stagger-line--1">The annoying part</p>
+    <h2 class="t-stagger-line t-stagger-line--2">Describing UI is slow. Pointing isn't.</h2>
+    <p class="big t-stagger-line t-stagger-line--3">
+      You can spend three messages explaining which heading, on which page, in which
+      state. Or you can click it. Laminator reads the page, works out which rule paints
+      what you clicked, and writes it down properly.
+    </p>
+  </div>
+</section>
 
-<h3>How you use it</h3>
-<ol class="steps">
-  <li>Run <code>npx laminator init</code> <span>— it scans your project and prints one script tag</span></li>
-  <li>Add that tag to your app <span>— development only</span></li>
-  <li>Press <code>Ctrl/Cmd+Shift+F</code> <span>— the toolbar appears bottom-right</span></li>
-  <li>Click any element and write what is wrong <span>— or dictate it</span></li>
-  <li>Press <strong>Send</strong> <span>— your agent opens with the whole batch</span></li>
-</ol>
+<!-- ── Install ──────────────────────────────────────────────────────── -->
+<section class="band" id="install">
+  <div class="mid reveal t-stagger">
+    <p class="eyebrow t-stagger-line t-stagger-line--1">Install</p>
+    <h2 class="t-stagger-line t-stagger-line--2">Two commands and one line</h2>
+    <p class="t-stagger-line t-stagger-line--3">
+      Run it in your project. It reads the repo, finds your stylesheets and prints a
+      script tag. Add that tag in development only.
+    </p>
+  </div>
 
-<div class="note"><p><strong>Entirely local.</strong> One Node process bound to <code>127.0.0.1</code>,
-<strong>zero npm dependencies</strong>, no account, no telemetry. Nothing leaves your machine.</p></div>
+  <div class="mid" style="margin-top:26px">
+    <div class="snip" style="margin-bottom:22px">
+<pre><span class="g"># in your project root</span>
+npm i -D laminator
+npx laminator init</pre>
+    </div>
 
-<h2 id="install">Install</h2>
-<pre><code><span class="c"># in your project root</span>
-npm install --save-dev laminator
-npx laminator init</code></pre>
-<p>Then add the printed line to your app, guarded so it never ships:</p>
-<table>
-<tr><th>Stack</th><th>Where it goes</th></tr>
-<tr><td>Static HTML</td><td>before <code>&lt;/body&gt;</code></td></tr>
-<tr><td>Vite</td><td><code>index.html</code>, before <code>&lt;/body&gt;</code></td></tr>
-<tr><td>Next.js</td><td><code>app/layout.tsx</code>, inside <code>{process.env.NODE_ENV === 'development' &amp;&amp; …}</code></td></tr>
-<tr><td>Nuxt</td><td><code>app.vue</code></td></tr>
-<tr><td>SvelteKit</td><td><code>src/app.html</code></td></tr>
-<tr><td>Rails</td><td><code>application.html.erb</code>, inside <code>&lt;% if Rails.env.development? %&gt;</code></td></tr>
-<tr><td>Django</td><td>your base template, inside <code>{% if debug %}</code></td></tr>
-</table>
-<pre><code>npx laminator          <span class="c"># serve</span></code></pre>
+    <div class="stackbar">
+      <div class="t-tabs" role="tablist" id="stacks">
+        <span class="t-tabs-pill" aria-hidden="true"></span>
+        <button class="t-tab" role="tab" aria-selected="true" data-s="html">HTML</button>
+        <button class="t-tab" role="tab" aria-selected="false" data-s="vite">Vite</button>
+        <button class="t-tab" role="tab" aria-selected="false" data-s="next">Next</button>
+        <button class="t-tab" role="tab" aria-selected="false" data-s="rails">Rails</button>
+        <button class="t-tab" role="tab" aria-selected="false" data-s="django">Django</button>
+      </div>
+    </div>
 
-<h2 id="modes">Capture modes</h2>
-<table>
-<tr><th>Mode</th><th>Key</th><th>What it captures</th></tr>
-<tr><td>Pick</td><td><code>E</code></td><td>One element — its rule, computed styles, component chain, and any neighbour whose edge misses by 0.4–6px</td></tr>
-<tr><td>Text</td><td><code>T</code></td><td>The exact copy you selected, plus the element holding it</td></tr>
-<tr><td>Multi</td><td><code>M</code></td><td>Several elements at once. Press <code>M</code> again to comment on them together</td></tr>
-<tr><td>Area</td><td><code>A</code></td><td>A dragged region — the container plus everything inside it</td></tr>
-<tr><td>Freeze</td><td><code>P</code></td><td>Pauses every animation and transition so you can annotate one frame</td></tr>
-<tr><td>Shots</td><td></td><td>Attaches a real screenshot of the element, cropped with 48px of surroundings</td></tr>
-</table>
-<p>The comment box takes <strong>dictation</strong> too, where the browser supports it.</p>
-<div class="note warn"><p>Dictation uses the browser's speech API, which on Chrome sends audio to
-Google. It is opt-in per use and the button says so. Nothing else in Laminator touches the network.</p></div>
+    <div class="snip" data-p="html">
+<pre><span class="g">&lt;!-- before &lt;/body&gt; --&gt;</span>
+&lt;script src="http://127.0.0.1:7317/client.js"&gt;&lt;/script&gt;</pre>
+    </div>
+    <div class="snip" data-p="vite" hidden>
+<pre><span class="g">&lt;!-- index.html, before &lt;/body&gt; --&gt;</span>
+&lt;script src="http://127.0.0.1:7317/client.js"&gt;&lt;/script&gt;</pre>
+    </div>
+    <div class="snip" data-p="next" hidden>
+<pre><span class="g">// app/layout.tsx</span>
+{process.env.NODE_ENV === 'development' &amp;&amp; (
+  &lt;script src="http://127.0.0.1:7317/client.js" /&gt;
+)}</pre>
+    </div>
+    <div class="snip" data-p="rails" hidden>
+<pre><span class="g">&lt;%# application.html.erb %&gt;</span>
+&lt;% if Rails.env.development? %&gt;
+  &lt;script src="http://127.0.0.1:7317/client.js"&gt;&lt;/script&gt;
+&lt;% end %&gt;</pre>
+    </div>
+    <div class="snip" data-p="django" hidden>
+<pre><span class="g">{# your base template #}</span>
+{% if debug %}
+  &lt;script src="http://127.0.0.1:7317/client.js"&gt;&lt;/script&gt;
+{% endif %}</pre>
+    </div>
 
-<h2 id="anchor">What it can anchor</h2>
-<p>This decides how useful a finding is, so Laminator says which case it is rather than guessing:</p>
-<table>
-<tr><th>Says</th><th>Means</th><th>The agent gets</th></tr>
-<tr><td><code>rule</code></td><td>An authored stylesheet rule paints it</td><td>The exact <code>file:line</code>, its declarations, and how many elements it moves</td></tr>
-<tr><td><code>utility</code></td><td>Tailwind or similar — there is no rule</td><td>The class list and the component, so it edits the markup</td></tr>
-<tr><td><code>none</code></td><td>CSS module, <code>&lt;style&gt;</code> block, or CSS-in-JS</td><td>The class list to search for</td></tr>
-</table>
-<div class="note"><p><strong>CSS modules are excluded on purpose.</strong> Their class names are hashed at
-build time, so a selector seen in the browser cannot be traced back to source. An anchor there would look
-right and point nowhere.</p></div>
+    <div class="snip" style="margin-top:22px">
+<pre>npx laminator          <span class="g"># then open your app</span>
+                       <span class="g"># Ctrl/Cmd+Shift+F</span></pre>
+    </div>
+  </div>
+</section>
 
-<h2 id="handoff">Handing off</h2>
-<p>Send writes the batch and opens your agent on it. Four choices under <strong>Setup → Open in</strong>:</p>
-<ul>
-  <li><strong>New chat</strong> — a fresh session, so the review does not interleave with what you were doing</li>
-  <li><strong>Continue last</strong> — a new window carrying your most recent conversation</li>
-  <li><strong>A named session</strong> — a new window carrying that specific conversation</li>
-  <li><strong>Copy only</strong> — writes the file, opens nothing, puts the prompt on your clipboard</li>
-</ul>
-<div class="note warn"><p><strong>Nothing can type into a terminal that is already running.</strong> No agent
-CLI has a way in, and Claude Code's <code>--resume</code> on a live session starts a <em>copy</em>. So
-"send it to the terminal I already have open" is <strong>Copy only</strong> plus a paste — and Laminator
-says so rather than pretending otherwise.</p></div>
-<p>As your agent resolves findings, the pins <strong>go grey while you watch</strong>. The queue is shared
-and the page polls it every three seconds.</p>
+<!-- ── Pointing ─────────────────────────────────────────────────────── -->
+<section class="band" id="point">
+  <div class="mid center reveal t-stagger">
+    <p class="eyebrow t-stagger-line t-stagger-line--1">Pointing</p>
+    <h2 class="t-stagger-line t-stagger-line--2">Four ways to say "this bit"</h2>
+  </div>
+  <div class="grid">
+    <div class="card"><h3>Pick <span class="key">E</span></h3><p>One element. You get its rule, its computed styles, its component, and any neighbour whose edge misses by a couple of pixels.</p></div>
+    <div class="card"><h3>Text <span class="key">T</span></h3><p>Select some copy. The exact words come through, so nobody has to guess which sentence you meant.</p></div>
+    <div class="card"><h3>Multi <span class="key">M</span></h3><p>Click several things. Press M again and they become one comment about all of them.</p></div>
+    <div class="card"><h3>Area <span class="key">A</span></h3><p>Drag a box. You get the container plus everything inside it, for when the problem is the arrangement.</p></div>
+    <div class="card"><h3>Freeze <span class="key">P</span></h3><p>Stops every animation so you can annotate the frame that's actually wrong.</p></div>
+    <div class="card"><h3>Shots</h3><p>Attaches a real screenshot of the element, with room around it so the spacing is visible.</p></div>
+  </div>
+  <div class="mid callout">
+    <p>You can dictate the comment instead of typing it. On Chrome that sends audio to
+    Google's speech service, so it's off until you press the button, and the button says so.
+    Nothing else here touches the network.</p>
+  </div>
+</section>
 
-<h2 id="output">Output</h2>
-<p>Every Send writes two files into <code>.laminator/</code> — markdown for reading, JSON for parsing:</p>
-<pre><code><span class="c"># .laminator/review-2026-09-09T20-17-00.md</span>
-<span class="k">##</span> Annotation #1 — h2
+<!-- ── Anchors ──────────────────────────────────────────────────────── -->
+<section class="band">
+  <div class="mid reveal t-stagger">
+    <p class="eyebrow t-stagger-line t-stagger-line--1">Honesty</p>
+    <h2 class="t-stagger-line t-stagger-line--2">Sometimes there's no line to point at</h2>
+    <p class="t-stagger-line t-stagger-line--3">
+      Not every element comes from a stylesheet you can open. Laminator says which case
+      it's in instead of guessing.
+    </p>
+  </div>
+  <div class="mid rows">
+    <div class="row"><div class="lead"><code>rule</code></div><p class="say">A stylesheet rule paints it. Your agent gets the file, the line, what it currently declares, and how many elements share it.</p></div>
+    <div class="row"><div class="lead"><code>utility</code></div><p class="say">Tailwind, or something like it. There's no rule to edit, so you get the class list and the component name instead.</p></div>
+    <div class="row"><div class="lead"><code>none</code></div><p class="say">A CSS module, a style block, or CSS-in-JS. You get the classes to search for.</p></div>
+  </div>
+  <div class="mid callout">
+    <p>CSS modules are left out of the index on purpose. Their class names are hashed when
+    you build, so a selector in the browser can't be traced back to the source. An anchor
+    there would look right and point nowhere.</p>
+  </div>
+</section>
 
-<span class="k">**Feedback:**</span> these cards feel cramped
-<span class="k">**Intent:**</span> fix · <span class="k">**Severity:**</span> important
+<!-- ── Handoff ──────────────────────────────────────────────────────── -->
+<section class="band" id="handoff">
+  <div class="mid reveal t-stagger">
+    <p class="eyebrow t-stagger-line t-stagger-line--1">Handoff</p>
+    <h2 class="t-stagger-line t-stagger-line--2">Send, then watch the list drain</h2>
+    <p class="t-stagger-line t-stagger-line--3">
+      Send writes the batch and opens your agent on it. As it fixes each one, that pin
+      goes grey in your browser. You don't wait for a summary.
+    </p>
+  </div>
+  <div class="mid rows">
+    <div class="row"><div class="lead">New chat</div><p class="say">A fresh session, so the review doesn't get tangled up in whatever you were doing.</p></div>
+    <div class="row"><div class="lead">Continue last</div><p class="say">A new window carrying your most recent conversation.</p></div>
+    <div class="row"><div class="lead">A named session</div><p class="say">A new window carrying that specific conversation.</p></div>
+    <div class="row"><div class="lead">Copy only</div><p class="say">Writes the file, opens nothing, puts the prompt on your clipboard.</p></div>
+  </div>
+  <div class="mid callout">
+    <p>Nothing can type into a terminal that's already running. No CLI has a way in, and
+    Claude Code's <code>--resume</code> on a live session starts a copy of it. So "send it
+    to the window I've already got open" is Copy only, then paste.</p>
+  </div>
+</section>
 
-<span class="k">**Rule:**</span> `.bean-name` — styles/cards.css:3
-<span class="k">**Applies to:**</span> 3 elements on this page — an edit here moves all of them
+<!-- ── Safety ───────────────────────────────────────────────────────── -->
+<section class="band" id="safe">
+  <div class="mid reveal t-stagger">
+    <p class="eyebrow t-stagger-line t-stagger-line--1">Safety</p>
+    <h2 class="t-stagger-line t-stagger-line--2">It stays on your machine</h2>
+  </div>
+  <div class="mid rows">
+    <div class="row"><div class="lead">Local only</div><p class="say">The server binds to 127.0.0.1. Not 0.0.0.0, so nothing on your network can reach it.</p></div>
+    <div class="row"><div class="lead">No dependencies</div><p class="say">Zero npm packages. Nothing is fetched at install beyond Laminator itself.</p></div>
+    <div class="row"><div class="lead">Token on writes</div><p class="say">Any page you visit can fire a request at localhost. The browser stops it reading the reply, but not sending it — so anything that writes needs a token, and the script carrying that token is only served to localhost.</p></div>
+    <div class="row"><div class="lead">Narrow writes</div><p class="say">The write endpoint takes a file, a line, a property and a value. There's no free-text write, and the file has to be one the scan listed.</p></div>
+    <div class="row"><div class="lead">Out of your diffs</div><p class="say"><code>.laminator/</code> ships its own gitignore.</p></div>
+  </div>
+</section>
 
-<span class="k">**Where:**</span> section.card-grid &gt; article.bean-card &gt; h2.bean-name
-<span class="k">**Page:**</span> /
-<span class="k">**Computed:**</span> font-size: 19px; margin: 0px 0px 4px</code></pre>
-<p>A <strong>standing brief</strong> you write once appears above the findings, because it changes how they
-should be read.</p>
-
-<h2 id="schema">Schema <span class="pill">AFS 1.1</span></h2>
-<p>Records follow the <strong>Annotation Format Schema v1.1</strong> plus a <code>laminator</code>
-extension, so a queue written here is readable by anything that already understands AFS.</p>
-<pre><code>{
-  <span class="s">"id"</span>: <span class="s">"ann_m1x9q_4f2a"</span>,
-  <span class="s">"comment"</span>: <span class="s">"these cards feel cramped"</span>,
-  <span class="s">"elementPath"</span>: <span class="s">"section.card-grid &gt; article.bean-card &gt; h2.bean-name"</span>,
-  <span class="s">"element"</span>: <span class="s">"h2"</span>,
-  <span class="s">"url"</span>: <span class="s">"/"</span>,
-  <span class="s">"boundingBox"</span>: { <span class="s">"x"</span>: 177, <span class="s">"y"</span>: 211, <span class="s">"width"</span>: 284, <span class="s">"height"</span>: 27 },
-  <span class="s">"intent"</span>: <span class="s">"fix"</span>,
-  <span class="s">"severity"</span>: <span class="s">"important"</span>,
-  <span class="s">"status"</span>: <span class="s">"pending"</span>,
-  <span class="s">"screenshot"</span>: <span class="s">".laminator/shots/ann_m1x9q_4f2a.png"</span>,
-  <span class="s">"laminator"</span>: {
-    <span class="s">"styling"</span>: <span class="s">"rule"</span>,
-    <span class="s">"rule"</span>: {
-      <span class="s">"file"</span>: <span class="s">"styles/cards.css"</span>, <span class="s">"line"</span>: 3,
-      <span class="s">"prelude"</span>: <span class="s">".bean-name"</span>, <span class="s">"siblings"</span>: 3,
-      <span class="s">"declarations"</span>: { <span class="s">"font-size"</span>: <span class="s">"19px"</span> },
-      <span class="s">"at"</span>: [<span class="s">"@media (prefers-color-scheme: dark)"</span>]
-    },
-    <span class="s">"misaligned"</span>: [{ <span class="s">"sibling"</span>: <span class="s">"p.bean-note"</span>, <span class="s">"edge"</span>: <span class="s">"left"</span>, <span class="s">"off"</span>: 2.4 }],
-    <span class="s">"viewport"</span>: { <span class="s">"w"</span>: 1280, <span class="s">"h"</span>: 860 },
-    <span class="s">"theme"</span>: <span class="s">"light"</span>
-  }
-}</code></pre>
-
-<h2 id="cli">CLI</h2>
-<pre><code>laminator init      <span class="c"># scan, write the command file, print the snippet</span>
-laminator           <span class="c"># serve (scans first if it never has)</span>
-laminator scan      <span class="c"># re-read the project after moving CSS around</span>
-laminator doctor    <span class="c"># what it found, and what it could not</span>
-
-  --root DIR        <span class="c"># project to work on   (default: cwd)</span>
-  --port N          <span class="c"># sidecar port         (default: 7317)</span></code></pre>
-
-<h2 id="api">HTTP API</h2>
-<p>Everything the overlay does is a plain HTTP call your agent can make too.</p>
-<table>
-<tr><th>Endpoint</th><th>What it does</th></tr>
-<tr><td><code>GET /queue</code></td><td>The live findings</td></tr>
-<tr><td><code>POST /queue</code></td><td><code>add</code>, <code>update</code>, <code>reply</code>, <code>delete</code>, <code>clear</code>, <code>export</code>, <code>savings</code></td></tr>
-<tr><td><code>POST /rules</code></td><td>Candidate rules for a set of selector tokens</td></tr>
-<tr><td><code>POST /css</code></td><td>Change one declaration in one rule</td></tr>
-<tr><td><code>GET /config</code></td><td>What the scan found</td></tr>
-<tr><td><code>GET /sessions</code></td><td>Live agent conversations to hand off to</td></tr>
-</table>
-<pre><code><span class="c"># close a finding — the pin greys out in the browser within 3s</span>
-curl -s -X POST -H <span class="s">"content-type: application/json"</span> \
-  -d <span class="s">'{"action":"update","id":"ann_…","patch":{"status":"resolved"}}'</span> \
-  http://127.0.0.1:7317/queue</code></pre>
-<div class="note"><p>Requests carrying an <code>Origin</code> must come from localhost <em>and</em> present
-<code>x-laminator-token</code>. Requests with no Origin — your agent's <code>curl</code> — are local
-processes and are allowed. See <a href="#privacy">Privacy</a> for why.</p></div>
-
-<h2 id="config">Config</h2>
-<p><code>.laminator/config.json</code> is plain JSON, meant to be read and argued with. The
-<code>overrides</code> block survives a re-scan; everything else is regenerated.</p>
-<pre><code>{
-  <span class="s">"overrides"</span>: {
-    <span class="s">"surfaceRoot"</span>:   <span class="s">""</span>,   <span class="c">// selector for your app's main container</span>
-    <span class="s">"includeStyles"</span>: [],   <span class="c">// stylesheets the scan missed</span>
-    <span class="s">"excludeStyles"</span>: []    <span class="c">// stylesheets it must never write to</span>
-  }
-}</code></pre>
-
-<h2 id="privacy">Privacy and safety</h2>
-<ul>
-  <li>Binds to <strong>127.0.0.1</strong> only — never <code>0.0.0.0</code>, so nothing on your network reaches it.</li>
-  <li><strong>Zero dependencies.</strong> Nothing is fetched at install beyond the package itself.</li>
-  <li>Any page you visit can send a request to localhost — the browser blocks it from <em>reading</em> the
-    reply, but not from making it. Since this server writes stylesheets, every mutating request from a page
-    must carry a token minted at <code>init</code>, and the script carrying it is only served to localhost
-    origins.</li>
-  <li>The write endpoint takes a file, a line, a property and a value. <strong>There is no free-text
-    write</strong>, and the file must be one the scan listed as editable.</li>
-  <li><code>.laminator/</code> carries its own <code>.gitignore</code> of <code>*</code>.</li>
-</ul>
-
-<h2 id="faq">FAQ</h2>
-<h3>Does this work without an AI agent?</h3>
-<p>Yes. Send writes the review file and copies the prompt whatever you have installed. The agent is the
-convenience, not the requirement.</p>
-<h3>My project is all Tailwind. Is it useless?</h3>
-<p>No, but be clear-eyed: there is no rule to point at, so findings come back as <code>utility</code> with
-the class list, the component name and the computed styles. That is still far more than a screenshot.</p>
-<h3>It says "no authored rule" for everything.</h3>
-<p>Run <code>laminator doctor</code>. If it reports <code>0 editable</code> stylesheets, the scan found
-none — add them to <code>overrides.includeStyles</code> and re-scan.</p>
-<h3>A finding points at the wrong line.</h3>
-<p>The stylesheet changed since the scan. Run <code>laminator scan</code>.</p>
-<h3>Can I self-host these docs?</h3>
-<p>They are one static HTML file in <code>site/</code>. <code>npm run site</code> serves it; it deploys to
-Railway, Vercel, Netlify or any static host unchanged.</p>
+<!-- ── FAQ ──────────────────────────────────────────────────────────── -->
+<section class="band">
+  <div class="mid reveal t-stagger">
+    <p class="eyebrow t-stagger-line t-stagger-line--1">Questions</p>
+    <h2 class="t-stagger-line t-stagger-line--2" style="margin-bottom:28px">The ones people ask</h2>
+  </div>
+  <div class="mid" id="faq">
+    <div class="t-acc" data-open="false">
+      <button class="t-acc-head" aria-expanded="false">Do I need an AI agent for this?
+        <span class="t-acc-chevron"><svg viewBox="0 0 16 16"><path d="M4 6.5L8 10.5L12 6.5"/></svg></span></button>
+      <div class="t-acc-panel"><div class="t-acc-panel-inner">
+        <p>No. Send writes the review file and copies the prompt whatever you have installed.
+        The agent is a convenience, not a requirement.</p>
+      </div></div>
+    </div>
+    <div class="t-acc" data-open="false">
+      <button class="t-acc-head" aria-expanded="false">My project is all Tailwind. Is it useless?
+        <span class="t-acc-chevron"><svg viewBox="0 0 16 16"><path d="M4 6.5L8 10.5L12 6.5"/></svg></span></button>
+      <div class="t-acc-panel"><div class="t-acc-panel-inner">
+        <p>No, but be clear-eyed about it. There's no rule to point at, so findings come back
+        marked <code>utility</code> with the class list, the component name and the computed
+        styles. Still a lot more than a screenshot and a sentence.</p>
+      </div></div>
+    </div>
+    <div class="t-acc" data-open="false">
+      <button class="t-acc-head" aria-expanded="false">It says "no authored rule" for everything
+        <span class="t-acc-chevron"><svg viewBox="0 0 16 16"><path d="M4 6.5L8 10.5L12 6.5"/></svg></span></button>
+      <div class="t-acc-panel"><div class="t-acc-panel-inner">
+        <p>Run <code>laminator doctor</code>. If it reports zero editable stylesheets, the scan
+        didn't find any. Add them to <code>overrides.includeStyles</code> in
+        <code>.laminator/config.json</code> and scan again.</p>
+      </div></div>
+    </div>
+    <div class="t-acc" data-open="false">
+      <button class="t-acc-head" aria-expanded="false">A finding points at the wrong line
+        <span class="t-acc-chevron"><svg viewBox="0 0 16 16"><path d="M4 6.5L8 10.5L12 6.5"/></svg></span></button>
+      <div class="t-acc-panel"><div class="t-acc-panel-inner">
+        <p>The stylesheet moved since the last scan. Run <code>laminator scan</code>.</p>
+      </div></div>
+    </div>
+    <div class="t-acc" data-open="false">
+      <button class="t-acc-head" aria-expanded="false">Can I edit CSS from the overlay?
+        <span class="t-acc-chevron"><svg viewBox="0 0 16 16"><path d="M4 6.5L8 10.5L12 6.5"/></svg></span></button>
+      <div class="t-acc-panel"><div class="t-acc-panel-inner">
+        <p>Yes. When a finding has a writable rule, the popup lists its declarations. Change one,
+        press Enter, and it goes into the file. Your dev server reloads it. The undo is
+        <code>git diff</code>.</p>
+      </div></div>
+    </div>
+  </div>
+</section>
 
 <footer>
-  <a href="https://github.com/Alphapatil-26/Laminator">GitHub</a>
-  <a href="#install">Install</a>
-  <a href="#api">API</a>
-  <span>MIT · built to be read</span>
+  <div class="foot">
+    <span>MIT</span>
+    <a href="https://github.com/Alphapatil-26/Laminator">GitHub</a>
+    <a href="https://github.com/Alphapatil-26/Laminator/blob/main/AGENTS.md">AGENTS.md</a>
+    <span class="sp">v0.1.0</span>
+  </div>
 </footer>
 
-</main>
-</div>
-
 <script>
-// Highlight the section you are actually reading. IntersectionObserver rather
-// than scroll maths: it fires only when a heading crosses the line, which is
-// both cheaper and correct when sections are shorter than the viewport.
-const links = [...document.querySelectorAll('nav a[href^="#"]')]
-const byId = new Map(links.map(a => [a.getAttribute('href').slice(1), a]))
-const seen = new Set()
-const io = new IntersectionObserver((entries) => {
-  for (const e of entries) e.isIntersecting ? seen.add(e.target.id) : seen.delete(e.target.id)
-  const first = [...byId.keys()].find(id => seen.has(id))
-  if (!first) return
-  links.forEach(a => a.classList.toggle('on', a === byId.get(first)))
-}, { rootMargin: '0px 0px -70% 0px' })
-document.querySelectorAll('h1[id],h2[id]').forEach(h => io.observe(h))
+// ── Nav hairline appears once you have scrolled past the hero's top ────
+const head = document.getElementById('top')
+addEventListener('scroll', () => head.classList.toggle('stuck', scrollY > 8), { passive: true })
+
+// ── Texts reveal, driven by the viewport ───────────────────────────────
+// The hero plays immediately; everything below waits until it is actually
+// on screen, so the stagger lands as you arrive rather than firing off-screen
+// where nobody sees it.
+requestAnimationFrame(() => document.getElementById('hero').classList.add('is-shown'))
+const io = new IntersectionObserver((entries, obs) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue
+    e.target.classList.add('is-shown')
+    obs.unobserve(e.target)
+  }
+}, { rootMargin: '0px 0px -12% 0px' })
+document.querySelectorAll('.reveal.t-stagger').forEach((n) => io.observe(n))
+
+// ── Sliding tabs ───────────────────────────────────────────────────────
+const bar = document.getElementById('stacks')
+const pill = bar.querySelector('.t-tabs-pill')
+const tabs = [...bar.querySelectorAll('.t-tab')]
+
+function movePill(animate) {
+  const on = bar.querySelector('.t-tab[aria-selected="true"]')
+  if (!on) return
+  // First paint and every resize write the position with the transition
+  // suspended. The pill rests at translateX(0) with width 0, so without this
+  // it would visibly grow out of the left edge from a state nobody saw.
+  if (!animate) pill.style.transition = 'none'
+  pill.style.transform = `translateX(${on.offsetLeft - bar.clientLeft}px)`
+  pill.style.width = `${on.offsetWidth}px`
+  if (!animate) { void pill.offsetWidth; pill.style.transition = '' }
+}
+tabs.forEach((t) => t.addEventListener('click', () => {
+  tabs.forEach((x) => x.setAttribute('aria-selected', String(x === t)))
+  document.querySelectorAll('.snip[data-p]').forEach((p) => { p.hidden = p.dataset.p !== t.dataset.s })
+  movePill(true)
+}))
+movePill(false)
+addEventListener('resize', () => movePill(false))
+// Web fonts land after first paint and change the tab widths under the pill.
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => movePill(false))
+
+// ── Accordion ──────────────────────────────────────────────────────────
+document.querySelectorAll('#faq .t-acc').forEach((acc) => {
+  const head = acc.querySelector('.t-acc-head')
+  head.addEventListener('click', () => {
+    const open = acc.dataset.open === 'true'
+    acc.dataset.open = String(!open)
+    head.setAttribute('aria-expanded', String(!open))
+  })
+})
+
+// ── Copy, with the check drawing itself ────────────────────────────────
+const btn = document.getElementById('copy')
+const icon = document.getElementById('copyicon')
+const tick = document.getElementById('tick')
+btn.addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(document.getElementById('cmd').textContent.trim()) } catch {}
+  icon.style.opacity = '0'
+  // Remove, force a reflow, re-add: without the reflow the browser coalesces
+  // both writes and the animation never replays on a second click.
+  tick.removeAttribute('data-state')
+  void tick.offsetWidth
+  tick.setAttribute('data-state', 'in')
+  setTimeout(() => { icon.style.opacity = ''; tick.removeAttribute('data-state') }, 1600)
+})
 </script>
 </body>
 </html>

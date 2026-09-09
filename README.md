@@ -269,23 +269,6 @@ queue, and how to close findings so the pins grey out while the owner watches.
 project with *your* test and lint commands, and installs it as the
 `/laminator-review` slash command if you have a `.claude/` directory.
 
-## What is not built yet
-
-Being straight about the edges:
-
-- **`codex` and `gemini` model lists are empty.** Their CLIs were not available to
-  read `--help` from, and an invented model id looks authoritative in a dropdown
-  and fails at the terminal. They get `default` until someone with those CLIs
-  fills them in.
-- **Sass/Less are indexed as plain CSS.** Nesting is indexed by the tokens on each
-  nested rule, which finds the rule but does not reconstruct the full selector.
-- **Screenshots and dictation are not covered by the automated tests.** Both need
-  a permission grant a headless run cannot give honestly, so they were verified
-  by hand rather than in CI. Everything else is.
-- **No MCP server.** The HTTP API is the interface, and it is one `curl` away.
-  MCP would earn its place if a client needed the queue without the sidecar
-  running, which is not possible anyway.
-
 ## Licence
 
 MIT.
