@@ -1,18 +1,17 @@
-/* Laminator overlay — runs inside the page being reviewed.
+/* Laminator overlay, running inside the page being reviewed.
  *
- * SHADOW DOM, not a plain div. This runs inside somebody else's stylesheet, and
- * the host is entitled to say `* { box-sizing: content-box }` or `button {
- * all: unset }`. A tool that renders into the light DOM inherits every one of
- * those and looks broken on exactly the projects that most need it.
+ * Shadow DOM, because this lands inside somebody else's stylesheet and the host
+ * is entitled to say `* { box-sizing: content-box }` or `button { all: unset }`.
+ * In the light DOM it would inherit all of that and look broken on exactly the
+ * projects that need it most.
  *
- * NO FRAMEWORK. Not purity: the overlay must mount on React, Vue, Svelte, Rails
- * and a static HTML file from the same one line, and the moment it needs a
- * framework it needs a build per framework.
+ * No framework, so the same one line mounts it on React, Vue, Svelte, Rails or
+ * a static HTML file without a build per framework.
  *
- * WHAT IT NEVER DOES: no network call to anywhere but 127.0.0.1, no analytics,
- * no storage beyond this origin's localStorage for your own preferences. The one
- * exception is dictation, which is Chrome's Web Speech API and therefore sends
- * audio to Google — it is opt-in per use and the button says so.
+ * It calls nothing but 127.0.0.1, keeps no storage beyond this origin's
+ * localStorage, and has no analytics. Dictation is the exception: that is
+ * Chrome's Web Speech API, so audio goes to Google. It is opt-in per use and
+ * the button says so.
  */
 (() => {
     'use strict'
@@ -42,6 +41,16 @@
 
     const OURS = (n) => n && n.closest && n.closest('#laminator-root')
 
+    /** Where a path stops climbing. Set `overrides.surfaceRoot` when your app's
+     *  container is not a <main>, or paths run the full six hops to <body>. */
+    function atRoot(n) {
+        if (!n) return true
+        if (CFG.surfaceRoot) {
+            try { if (n.matches(CFG.surfaceRoot)) return true } catch { /* bad selector */ }
+        }
+        return n.tagName === 'MAIN' || n.tagName === 'BODY'
+    }
+
     function elementPath(el) {
         const parts = []
         let n = el
@@ -52,7 +61,7 @@
             if (cls.length) s += '.' + cls.join('.')
             parts.unshift(s)
             n = n.parentElement
-            if (n && (n.tagName === 'MAIN' || n.tagName === 'BODY')) break
+            if (atRoot(n)) break
         }
         return parts.join(' > ')
     }
@@ -71,10 +80,10 @@
     /**
      * Which authored rule actually paints this element.
      *
-     * The server proposes candidates from its index; only the BROWSER can say
-     * which of them match, so it confirms each with `matches()` and keeps the
-     * most specific. A prelude with a comma is split first — `.a, .b` is two
-     * selectors and only one of them may be why this element is styled.
+     * The server proposes candidates from its index. Only the browser can say
+     * which match, so each is confirmed with matches() and the most specific
+     * wins. Preludes are split on commas first, since `.a, .b` is two selectors
+     * and only one of them may be why this element looks the way it does.
      */
     async function resolveRule(el) {
         const tokens = tokensOf(el)
@@ -101,7 +110,7 @@
 
     const STYLE_PROPS = ['display', 'position', 'font-size', 'font-weight', 'line-height', 'color', 'background-color', 'padding', 'margin', 'border-radius', 'width', 'height', 'gap']
 
-    /** Component names from a React fiber, when there is one. Names only —
+    /** Component names from a React fiber, when there is one. Names only:
      *  React 19 removed the source locations these used to carry. */
     function reactChain(el) {
         const key = Object.keys(el).find((k) => k.startsWith('__reactFiber$'))
@@ -118,8 +127,8 @@
         return names.slice(0, 5).reverse().join(' > ') || null
     }
 
-    /** Neighbours whose edges NEARLY line up. "Nearly" is the point: a 2px miss
-     *  is a bug worth reporting and a 0px match is not worth a word. */
+    /** Neighbours whose edges nearly line up. A 2px miss is worth reporting;
+     *  a clean 0px match is not. */
     function misalignments(el) {
         const out = []
         const r = el.getBoundingClientRect()
@@ -186,7 +195,7 @@
         if (track) track.addEventListener('ended', () => { stopShots(); shots = false; say('Screen sharing stopped'); render() })
         const v = document.createElement('video')
         v.srcObject = stream; v.muted = true; v.playsInline = true
-        // Off-screen but LAID OUT: `display:none` stops a video painting, and a
+        // Off-screen but laid out. display:none stops a video painting, and a
         // video that never paints has no frame for drawImage to copy.
         v.style.cssText = 'position:fixed;left:-10000px;top:0;width:2px;height:2px;opacity:0;pointer-events:none'
         document.body.appendChild(v)
@@ -211,7 +220,7 @@
         else setTimeout(res, 120)
     })
 
-    /** A PNG of `rect` with room around it — an element cropped to its own edges
+    /** A PNG of `rect` with room around it. Cropped to its own edges, an element
      *  shows nothing about the spacing the complaint is usually about. */
     async function grabShot(rect) {
         const v = video
@@ -220,8 +229,8 @@
         host.style.visibility = 'hidden'
         try {
             await nextFrame(v)
-            // Derived from the frame, not from devicePixelRatio: browser zoom and
-            // Chrome's own capture downscaling both move it.
+            // From the frame, since browser zoom and Chrome's capture downscale
+            // both move devicePixelRatio out from under you.
             const scale = v.videoWidth / innerWidth
             const l = Math.max(0, rect.x - pad), t = Math.max(0, rect.y - pad)
             const rgt = Math.min(innerWidth, rect.x + rect.width + pad)
@@ -252,8 +261,8 @@
                 const t = (e.results[i][0] && e.results[i][0].transcript) || ''
                 if (e.results[i].isFinal) fin += t; else mid += t
             }
-            // Only FINAL text is appended. The engine revises interim results,
-            // and a caller that already committed cannot take the revision back.
+            // Final text only. The engine revises interim results, and a caller
+            // that already committed cannot take the revision back.
             if (fin.trim() && draft) draft.text = (draft.text ? draft.text.replace(/\s+$/, '') + ' ' : '') + fin.trim()
             heard = mid
             render()
@@ -562,8 +571,7 @@ select option { background:#1c1c1e; color:#f2f2f7; }
         const on = (sel, ev, fn) => sr.querySelectorAll(sel).forEach((n) => n.addEventListener(ev, fn))
         on('[data-mode]', 'click', (e) => {
             const m = e.currentTarget.dataset.mode
-            // Clicking Multi while already in Multi is the same "done" gesture
-            // as pressing M, not a plain toggle.
+            // Clicking Multi while in Multi is the same "done" gesture as M.
             if (m === 'multi' && mode === 'multi') return finishMulti()
             mode = mode === m ? null : m; hover = null; picked = []; render()
         })
@@ -590,9 +598,8 @@ select option { background:#1c1c1e; color:#f2f2f7; }
         on('[data-del]', 'click', async (e) => { await api('/queue', { action: 'delete', id: e.currentTarget.dataset.del }); pull() })
         on('[data-edit]', 'click', (e) => {
             const a = list.find((x) => x.id === e.currentTarget.dataset.edit); if (!a) return
-            // Editing from the LIST as well as the pin: pins are hidden on every
-            // route but their own, so without this a comment made elsewhere
-            // could never be reworded.
+            // From the list as well as the pin. Pins only show on the route they
+            // were made on, so otherwise a comment made elsewhere is unreachable.
             intent = a.intent || null; severity = a.severity || null; panel = null
             draft = {
                 rec: a, text: a.comment, editing: a.id, shot: null,
@@ -695,9 +702,8 @@ select option { background:#1c1c1e; color:#f2f2f7; }
         if (!open) return
         if (e.key === 'Escape') {
             if (draft) { draft = null; popPos = null; intent = severity = null }
-            // In multi, Escape drops the SELECTION first and the mode second.
-            // One key discarding six deliberate clicks is the wrong kind of
-            // decisive.
+            // In multi, Escape clears the selection first and the mode second,
+            // so one keypress cannot throw away six careful clicks.
             else if (mode === 'multi' && picked.length) picked = []
             else if (mode) mode = null
             else if (panel) panel = null
@@ -740,8 +746,8 @@ select option { background:#1c1c1e; color:#f2f2f7; }
     addEventListener('mouseup', (e) => {
         if (!open || mode !== 'text' || draft) return
         if (e.target instanceof Element && OURS(e.target)) return
-        // Deferred a tick: on mouseup the selection is not committed yet, so
-        // reading it here returns the PREVIOUS one.
+        // Deferred a tick. On mouseup the selection is not committed yet, so
+        // reading it now returns the previous one.
         setTimeout(async () => {
             const sel = getSelection()
             const text = sel && sel.toString().trim()
@@ -785,9 +791,8 @@ select option { background:#1c1c1e; color:#f2f2f7; }
     addEventListener('scroll', reflow, true)
     addEventListener('resize', reflow)
 
-    // The queue is shared with whatever agent is working it, so it is polled
-    // rather than fetched once — that is what makes a pin go grey while you
-    // watch instead of only after a reload.
+    // Polled, because the agent working the queue writes to it too. This is
+    // what makes a pin go grey while you watch instead of after a reload.
     setInterval(() => { if (open) pull() }, 3000)
 
     console.log('%c laminator %c ' + CFG.project.name + ' — Ctrl/Cmd+Shift+F',

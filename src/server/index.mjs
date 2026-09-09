@@ -1,24 +1,19 @@
-// The local sidecar. Binds to 127.0.0.1 and talks to nothing else, ever.
+// The local sidecar. Binds to 127.0.0.1 and talks to nothing else.
 //
-// WHY A SIDECAR AND NOT A DEV-SERVER PLUGIN. The version this grew out of lived
-// inside one app's Next.js API routes, which was right for that app and wrong
-// for a shared tool: it would need a Next adapter, a Vite adapter, a Nuxt
-// adapter, and it would not work at all for a project whose dev server is Rails
-// or Django. One small HTTP process works everywhere and is the same code on
-// every stack.
+// A separate process rather than a dev-server plugin, so the same code works
+// whether your dev server is Vite, Next, Rails or Django.
 //
-// THE THREAT NOBODY EXPECTS. A server on localhost is reachable by any page in
-// the browser, including a random site on the internet: same-origin policy stops
-// that page READING the response, but it does not stop the request being made.
-// Since this process can write to stylesheets, a drive-by POST would be a real
-// edit to a real file. So:
+// The threat worth knowing about: a server on localhost is reachable by any
+// page in your browser, including a site on the internet. Same-origin policy
+// stops that page reading the response; it does not stop the request. Since
+// this process can write stylesheets, a drive-by POST would be a real edit to a
+// real file. So:
 //
-//   - Requests carrying an `Origin` must come from localhost AND present the
-//     token generated at init. A foreign page can send the request but cannot
-//     learn the token, because the script that carries it is only served to
-//     localhost origins.
-//   - Requests with NO `Origin` are local processes — curl, the agent working
-//     the queue — and are allowed. A page cannot suppress its own Origin header.
+//   - Requests with an Origin must come from localhost and carry the token
+//     minted at init. A foreign page can send the request but cannot learn the
+//     token, because the script holding it is only served to localhost.
+//   - Requests with no Origin are local processes such as curl or the agent
+//     working the queue. A page cannot suppress its own Origin header.
 
 import { createServer } from 'http'
 import { promises as fs } from 'fs'
@@ -47,8 +42,7 @@ async function body(req) {
     const chunks = []
     for await (const c of req) {
         chunks.push(c)
-        // A dev tool has no business accepting a 50MB POST; a screenshot is the
-        // largest legitimate payload and is nowhere near this.
+        // A screenshot is the largest legitimate payload and is nowhere near this.
         if (chunks.reduce((n, b) => n + b.length, 0) > 12 * 1024 * 1024) throw new Error('too large')
     }
     if (!chunks.length) return {}
@@ -73,8 +67,7 @@ export async function serve(root, { port = 7317, quiet = false } = {}) {
 
         // ── who is allowed to speak ──────────────────────────────────────
         if (origin && !LOCAL.test(origin)) {
-            // No CORS headers at all: the page cannot read the answer, and the
-            // refusal is explicit rather than a silent empty response.
+            // No CORS headers, so the page cannot read the answer either.
             res.writeHead(403, { 'content-type': 'text/plain' })
             return res.end('laminator only serves localhost origins')
         }
@@ -103,11 +96,13 @@ export async function serve(root, { port = 7317, quiet = false } = {}) {
                     'cache-control': 'no-store',
                     ...(allow ? { 'access-control-allow-origin': allow, vary: 'Origin' } : {}),
                 })
-                // The token is baked in here, and this file is only served to
-                // localhost origins — that is what keeps it out of a foreign
-                // page's hands.
+                // The token is baked in, and this file only goes to localhost.
                 return res.end(
-                    `window.__LAMINATOR__=${JSON.stringify({ port, token, project: config.project })};\n${clientSrc}`,
+                    `window.__LAMINATOR__=${JSON.stringify({
+                        port, token,
+                        project: config.project,
+                        surfaceRoot: config.overrides?.surfaceRoot || '',
+                    })};\n${clientSrc}`,
                 )
             }
 
@@ -184,8 +179,8 @@ export async function serve(root, { port = 7317, quiet = false } = {}) {
                             `review-${stamp}.json`,
                             JSON.stringify({ version: '1.1', exportedAt: new Date().toISOString(), annotations: list }, null, 2),
                         )
-                        // Recorded BEFORE the launch, so the ledger reflects what
-                        // was exported even when no terminal opens.
+                        // Before the launch, so the ledger is right even when no
+                        // terminal opens.
                         const av = await store.avoided(root, list, writableStyles(config))
                         await store.ledger(root, {
                             at: new Date().toISOString(),
@@ -223,7 +218,7 @@ export async function serve(root, { port = 7317, quiet = false } = {}) {
 
     await new Promise((resolve, reject) => {
         server.once('error', reject)
-        // 127.0.0.1, not 0.0.0.0: this must not be reachable from the network.
+        // 127.0.0.1 keeps it off the network.
         server.listen(port, '127.0.0.1', resolve)
     })
     if (!quiet) {
