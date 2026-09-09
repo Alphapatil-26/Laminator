@@ -9,7 +9,7 @@
   <a href="#quick-start">Quick start</a> ·
   <a href="#using-it">Usage</a> ·
   <a href="AGENTS.md">For your agent</a> ·
-  <a href="site/index.html">Docs</a>
+  <a href="https://alphapatil-26.github.io/Laminator/">Docs</a>
 </p>
 
 ---
@@ -248,7 +248,9 @@ Run `laminator scan`.
 
 ## Docs
 
-The site in [`site/`](site/) is one static HTML file with no build step.
+Live at **https://alphapatil-26.github.io/Laminator/**
+
+The site in [`docs/`](docs/) is one static HTML file with no build step.
 
 ```bash
 npm run site          # http://localhost:3000

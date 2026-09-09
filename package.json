@@ -22,8 +22,8 @@
     },
     "scripts": {
         "test": "node --test test/*.test.mjs",
-        "start": "node site/serve.mjs",
-        "site": "node site/serve.mjs"
+        "start": "node docs/serve.mjs",
+        "site": "node docs/serve.mjs"
     },
     "keywords": [
         "devtools",
