@@ -1,0 +1,4 @@
+node_modules/
+.laminator/
+*.log
+.DS_Store

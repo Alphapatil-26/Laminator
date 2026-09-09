@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Laminator — visual feedback for coding agents</title>
+<meta name="description" content="Point at anything in your running app and hand a coding agent the file and line that paints it. Entirely local, zero dependencies.">
+<meta property="og:title" content="Laminator">
+<meta property="og:description" content="Point at anything in your running app and hand a coding agent the file:line that paints it.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232f6df6'/%3E%3Ccircle cx='16' cy='16' r='5' fill='white'/%3E%3C/svg%3E">
+<style>
+:root{
+  --ink:#16181d; --dim:#5a6070; --faint:#8b91a0; --line:#e6e8ec;
+  --paper:#fff; --sub:#f7f8fa; --blue:#2f6df6; --code:#0f1115;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --ink:#e8eaf0; --dim:#9aa1b2; --faint:#6c7383; --line:#252932;
+    --paper:#0e1014; --sub:#14171d; --code:#080a0d; }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:24px}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{display:grid;grid-template-columns:232px minmax(0,1fr);gap:56px;max-width:1080px;margin:0 auto;padding:56px 32px 120px}
+nav{position:sticky;top:56px;align-self:start;height:max-content}
+.mark{font:italic 700 26px/1 Georgia,serif;color:var(--blue);margin:0 0 28px;letter-spacing:-.01em}
+nav h4{margin:24px 0 8px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);font-weight:600}
+nav a{display:block;padding:5px 0;color:var(--dim);text-decoration:none;font-size:14.5px}
+nav a:hover{color:var(--ink)}
+nav a.on{color:var(--ink);font-weight:600}
+nav .v{margin-top:28px;font-size:12px;color:var(--faint);font-family:var(--mono)}
+h1{font-size:44px;line-height:1.06;letter-spacing:-.025em;margin:0 0 8px;font-weight:700}
+h1 .hl{background:linear-gradient(180deg,transparent 58%,rgb(47 109 246/22%) 58%);padding:0 2px}
+h2{font-size:24px;letter-spacing:-.015em;margin:56px 0 14px;padding-top:14px;border-top:1px solid var(--line);font-weight:650}
+h2:first-of-type{border-top:0;padding-top:0}
+h3{font-size:16.5px;margin:28px 0 8px;font-weight:650}
+p{margin:0 0 14px;color:var(--dim)}
+p strong,li strong{color:var(--ink);font-weight:600}
+.lede{font-size:18.5px;line-height:1.55;color:var(--dim);max-width:62ch}
+code{font-family:var(--mono);font-size:.88em;background:var(--sub);border:1px solid var(--line);
+  border-radius:5px;padding:1px 5px}
+pre{background:var(--code);color:#e8eaf0;border-radius:12px;padding:16px 18px;overflow:auto;
+  font-family:var(--mono);font-size:13.5px;line-height:1.6;margin:0 0 16px}
+pre code{background:none;border:0;padding:0;font-size:inherit;color:inherit}
+pre .c{color:#6c7383}
+pre .k{color:#7aa2f7}
+pre .s{color:#9ece6a}
+ul,ol{margin:0 0 16px;padding-left:22px;color:var(--dim)}
+li{margin:6px 0}
+table{width:100%;border-collapse:collapse;margin:0 0 18px;font-size:14.5px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);font-weight:600}
+td{color:var(--dim)}
+td:first-child{color:var(--ink);white-space:nowrap}
+.pill{display:inline-block;font-size:11px;font-family:var(--mono);background:var(--sub);
+  border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--dim);margin-left:6px;vertical-align:middle}
+.install{display:flex;align-items:center;gap:10px;background:var(--sub);border:1px solid var(--line);
+  border-radius:10px;padding:10px 14px;font-family:var(--mono);font-size:13.5px;margin:0 0 28px;width:max-content;max-width:100%}
+.install button{border:0;background:none;color:var(--faint);cursor:pointer;font-size:13px;padding:2px 4px}
+.install button:hover{color:var(--ink)}
+.note{background:var(--sub);border:1px solid var(--line);border-left:3px solid var(--blue);
+  border-radius:0 10px 10px 0;padding:13px 16px;margin:0 0 18px}
+.note p{margin:0;font-size:14.5px}
+.note.warn{border-left-color:#f59e0b}
+.steps{counter-reset:s;list-style:none;padding:0}
+.steps li{counter-increment:s;position:relative;padding-left:30px;margin:10px 0;color:var(--ink)}
+.steps li::before{content:counter(s);position:absolute;left:0;top:1px;width:20px;height:20px;
+  border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;
+  display:grid;place-items:center}
+.steps li span{color:var(--dim);font-weight:400}
+.shot{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:0 0 28px;background:var(--sub)}
+.shot .chrome{display:flex;align-items:center;gap:6px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.shot .chrome i{width:10px;height:10px;border-radius:50%;background:var(--line);display:block}
+.shot .chrome b{flex:1;text-align:center;font:12px var(--mono);color:var(--faint);font-weight:400}
+.shot .body{padding:22px;font-family:var(--mono);font-size:12.5px;color:var(--dim);white-space:pre-wrap;line-height:1.7}
+footer{grid-column:1/-1;margin-top:80px;padding-top:24px;border-top:1px solid var(--line);
+  color:var(--faint);font-size:13.5px;display:flex;gap:18px;flex-wrap:wrap}
+footer a{text-decoration:none}
+footer a:hover{color:var(--ink)}
+@media (max-width:860px){
+  .wrap{grid-template-columns:1fr;gap:0;padding:32px 20px 80px}
+  nav{position:static;margin-bottom:36px}
+  nav h4{margin-top:16px}
+  h1{font-size:34px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav>
+  <div class="mark">Laminator</div>
+  <a href="#overview" class="on">Overview</a>
+  <a href="#install">Install</a>
+  <a href="#modes">Capture modes</a>
+  <a href="#anchor">What it can anchor</a>
+  <a href="#handoff">Handing off</a>
+  <a href="#output">Output</a>
+  <a href="#schema">Schema <span class="pill">AFS 1.1</span></a>
+  <h4>Tools</h4>
+  <a href="#cli">CLI</a>
+  <a href="#api">HTTP API</a>
+  <a href="#config">Config</a>
+  <h4>Resources</h4>
+  <a href="#privacy">Privacy</a>
+  <a href="#faq">FAQ</a>
+  <a href="https://github.com/Alphapatil-26/Laminator">GitHub &#8599;</a>
+  <div class="v">v0.1.0 · MIT</div>
+</nav>
+
+<main>
+
+<h1 id="overview"><span class="hl">Visual feedback.</span><br>For agents.</h1>
+<p class="lede">Laminator turns a click on your running app into structured context an AI coding
+agent can act on — the exact <strong>file and line</strong> that paints the thing you pointed at,
+what the rule currently declares, and how many other elements it moves.</p>
+
+<div class="install"><span>npm i -D laminator</span><button onclick="navigator.clipboard.writeText('npm i -D laminator')" title="Copy">⧉</button></div>
+
+<div class="shot">
+  <div class="chrome"><i></i><i></i><i></i><b>localhost:5173</b></div>
+  <div class="body">## Annotation #1 — h2
+
+<strong style="color:var(--ink)">Feedback:</strong> these cards feel cramped
+<strong style="color:var(--ink)">Intent:</strong> fix · <strong style="color:var(--ink)">Severity:</strong> important
+
+<strong style="color:var(--ink)">Rule:</strong> `.bean-name` — styles/cards.css:3
+<strong style="color:var(--ink)">Applies to:</strong> 3 elements on this page — an edit here moves all of them
+
+<strong style="color:var(--ink)">Where:</strong> section.card-grid &gt; article.bean-card &gt; h2.bean-name
+<strong style="color:var(--ink)">Computed:</strong> font-size: 19px; margin: 0px 0px 4px; line-height: 26.6px</div>
+</div>
+
+<h3>How you use it</h3>
+<ol class="steps">
+  <li>Run <code>npx laminator init</code> <span>— it scans your project and prints one script tag</span></li>
+  <li>Add that tag to your app <span>— development only</span></li>
+  <li>Press <code>Ctrl/Cmd+Shift+F</code> <span>— the toolbar appears bottom-right</span></li>
+  <li>Click any element and write what is wrong <span>— or dictate it</span></li>
+  <li>Press <strong>Send</strong> <span>— your agent opens with the whole batch</span></li>
+</ol>
+
+<div class="note"><p><strong>Entirely local.</strong> One Node process bound to <code>127.0.0.1</code>,
+<strong>zero npm dependencies</strong>, no account, no telemetry. Nothing leaves your machine.</p></div>
+
+<h2 id="install">Install</h2>
+<pre><code><span class="c"># in your project root</span>
+npm install --save-dev laminator
+npx laminator init</code></pre>
+<p>Then add the printed line to your app, guarded so it never ships:</p>
+<table>
+<tr><th>Stack</th><th>Where it goes</th></tr>
+<tr><td>Static HTML</td><td>before <code>&lt;/body&gt;</code></td></tr>
+<tr><td>Vite</td><td><code>index.html</code>, before <code>&lt;/body&gt;</code></td></tr>
+<tr><td>Next.js</td><td><code>app/layout.tsx</code>, inside <code>{process.env.NODE_ENV === 'development' &amp;&amp; …}</code></td></tr>
+<tr><td>Nuxt</td><td><code>app.vue</code></td></tr>
+<tr><td>SvelteKit</td><td><code>src/app.html</code></td></tr>
+<tr><td>Rails</td><td><code>application.html.erb</code>, inside <code>&lt;% if Rails.env.development? %&gt;</code></td></tr>
+<tr><td>Django</td><td>your base template, inside <code>{% if debug %}</code></td></tr>
+</table>
+<pre><code>npx laminator          <span class="c"># serve</span></code></pre>
+
+<h2 id="modes">Capture modes</h2>
+<table>
+<tr><th>Mode</th><th>Key</th><th>What it captures</th></tr>
+<tr><td>Pick</td><td><code>E</code></td><td>One element — its rule, computed styles, component chain, and any neighbour whose edge misses by 0.4–6px</td></tr>
+<tr><td>Text</td><td><code>T</code></td><td>The exact copy you selected, plus the element holding it</td></tr>
+<tr><td>Multi</td><td><code>M</code></td><td>Several elements at once. Press <code>M</code> again to comment on them together</td></tr>
+<tr><td>Area</td><td><code>A</code></td><td>A dragged region — the container plus everything inside it</td></tr>
+<tr><td>Freeze</td><td><code>P</code></td><td>Pauses every animation and transition so you can annotate one frame</td></tr>
+<tr><td>Shots</td><td></td><td>Attaches a real screenshot of the element, cropped with 48px of surroundings</td></tr>
+</table>
+<p>The comment box takes <strong>dictation</strong> too, where the browser supports it.</p>
+<div class="note warn"><p>Dictation uses the browser's speech API, which on Chrome sends audio to
+Google. It is opt-in per use and the button says so. Nothing else in Laminator touches the network.</p></div>
+
+<h2 id="anchor">What it can anchor</h2>
+<p>This decides how useful a finding is, so Laminator says which case it is rather than guessing:</p>
+<table>
+<tr><th>Says</th><th>Means</th><th>The agent gets</th></tr>
+<tr><td><code>rule</code></td><td>An authored stylesheet rule paints it</td><td>The exact <code>file:line</code>, its declarations, and how many elements it moves</td></tr>
+<tr><td><code>utility</code></td><td>Tailwind or similar — there is no rule</td><td>The class list and the component, so it edits the markup</td></tr>
+<tr><td><code>none</code></td><td>CSS module, <code>&lt;style&gt;</code> block, or CSS-in-JS</td><td>The class list to search for</td></tr>
+</table>
+<div class="note"><p><strong>CSS modules are excluded on purpose.</strong> Their class names are hashed at
+build time, so a selector seen in the browser cannot be traced back to source. An anchor there would look
+right and point nowhere.</p></div>
+
+<h2 id="handoff">Handing off</h2>
+<p>Send writes the batch and opens your agent on it. Four choices under <strong>Setup → Open in</strong>:</p>
+<ul>
+  <li><strong>New chat</strong> — a fresh session, so the review does not interleave with what you were doing</li>
+  <li><strong>Continue last</strong> — a new window carrying your most recent conversation</li>
+  <li><strong>A named session</strong> — a new window carrying that specific conversation</li>
+  <li><strong>Copy only</strong> — writes the file, opens nothing, puts the prompt on your clipboard</li>
+</ul>
+<div class="note warn"><p><strong>Nothing can type into a terminal that is already running.</strong> No agent
+CLI has a way in, and Claude Code's <code>--resume</code> on a live session starts a <em>copy</em>. So
+"send it to the terminal I already have open" is <strong>Copy only</strong> plus a paste — and Laminator
+says so rather than pretending otherwise.</p></div>
+<p>As your agent resolves findings, the pins <strong>go grey while you watch</strong>. The queue is shared
+and the page polls it every three seconds.</p>
+
+<h2 id="output">Output</h2>
+<p>Every Send writes two files into <code>.laminator/</code> — markdown for reading, JSON for parsing:</p>
+<pre><code><span class="c"># .laminator/review-2026-09-09T20-17-00.md</span>
+<span class="k">##</span> Annotation #1 — h2
+
+<span class="k">**Feedback:**</span> these cards feel cramped
+<span class="k">**Intent:**</span> fix · <span class="k">**Severity:**</span> important
+
+<span class="k">**Rule:**</span> `.bean-name` — styles/cards.css:3
+<span class="k">**Applies to:**</span> 3 elements on this page — an edit here moves all of them
+
+<span class="k">**Where:**</span> section.card-grid &gt; article.bean-card &gt; h2.bean-name
+<span class="k">**Page:**</span> /
+<span class="k">**Computed:**</span> font-size: 19px; margin: 0px 0px 4px</code></pre>
+<p>A <strong>standing brief</strong> you write once appears above the findings, because it changes how they
+should be read.</p>
+
+<h2 id="schema">Schema <span class="pill">AFS 1.1</span></h2>
+<p>Records follow the <strong>Annotation Format Schema v1.1</strong> plus a <code>laminator</code>
+extension, so a queue written here is readable by anything that already understands AFS.</p>
+<pre><code>{
+  <span class="s">"id"</span>: <span class="s">"ann_m1x9q_4f2a"</span>,
+  <span class="s">"comment"</span>: <span class="s">"these cards feel cramped"</span>,
+  <span class="s">"elementPath"</span>: <span class="s">"section.card-grid &gt; article.bean-card &gt; h2.bean-name"</span>,
+  <span class="s">"element"</span>: <span class="s">"h2"</span>,
+  <span class="s">"url"</span>: <span class="s">"/"</span>,
+  <span class="s">"boundingBox"</span>: { <span class="s">"x"</span>: 177, <span class="s">"y"</span>: 211, <span class="s">"width"</span>: 284, <span class="s">"height"</span>: 27 },
+  <span class="s">"intent"</span>: <span class="s">"fix"</span>,
+  <span class="s">"severity"</span>: <span class="s">"important"</span>,
+  <span class="s">"status"</span>: <span class="s">"pending"</span>,
+  <span class="s">"screenshot"</span>: <span class="s">".laminator/shots/ann_m1x9q_4f2a.png"</span>,
+  <span class="s">"laminator"</span>: {
+    <span class="s">"styling"</span>: <span class="s">"rule"</span>,
+    <span class="s">"rule"</span>: {
+      <span class="s">"file"</span>: <span class="s">"styles/cards.css"</span>, <span class="s">"line"</span>: 3,
+      <span class="s">"prelude"</span>: <span class="s">".bean-name"</span>, <span class="s">"siblings"</span>: 3,
+      <span class="s">"declarations"</span>: { <span class="s">"font-size"</span>: <span class="s">"19px"</span> },
+      <span class="s">"at"</span>: [<span class="s">"@media (prefers-color-scheme: dark)"</span>]
+    },
+    <span class="s">"misaligned"</span>: [{ <span class="s">"sibling"</span>: <span class="s">"p.bean-note"</span>, <span class="s">"edge"</span>: <span class="s">"left"</span>, <span class="s">"off"</span>: 2.4 }],
+    <span class="s">"viewport"</span>: { <span class="s">"w"</span>: 1280, <span class="s">"h"</span>: 860 },
+    <span class="s">"theme"</span>: <span class="s">"light"</span>
+  }
+}</code></pre>
+
+<h2 id="cli">CLI</h2>
+<pre><code>laminator init      <span class="c"># scan, write the command file, print the snippet</span>
+laminator           <span class="c"># serve (scans first if it never has)</span>
+laminator scan      <span class="c"># re-read the project after moving CSS around</span>
+laminator doctor    <span class="c"># what it found, and what it could not</span>
+
+  --root DIR        <span class="c"># project to work on   (default: cwd)</span>
+  --port N          <span class="c"># sidecar port         (default: 7317)</span></code></pre>
+
+<h2 id="api">HTTP API</h2>
+<p>Everything the overlay does is a plain HTTP call your agent can make too.</p>
+<table>
+<tr><th>Endpoint</th><th>What it does</th></tr>
+<tr><td><code>GET /queue</code></td><td>The live findings</td></tr>
+<tr><td><code>POST /queue</code></td><td><code>add</code>, <code>update</code>, <code>reply</code>, <code>delete</code>, <code>clear</code>, <code>export</code>, <code>savings</code></td></tr>
+<tr><td><code>POST /rules</code></td><td>Candidate rules for a set of selector tokens</td></tr>
+<tr><td><code>POST /css</code></td><td>Change one declaration in one rule</td></tr>
+<tr><td><code>GET /config</code></td><td>What the scan found</td></tr>
+<tr><td><code>GET /sessions</code></td><td>Live agent conversations to hand off to</td></tr>
+</table>
+<pre><code><span class="c"># close a finding — the pin greys out in the browser within 3s</span>
+curl -s -X POST -H <span class="s">"content-type: application/json"</span> \
+  -d <span class="s">'{"action":"update","id":"ann_…","patch":{"status":"resolved"}}'</span> \
+  http://127.0.0.1:7317/queue</code></pre>
+<div class="note"><p>Requests carrying an <code>Origin</code> must come from localhost <em>and</em> present
+<code>x-laminator-token</code>. Requests with no Origin — your agent's <code>curl</code> — are local
+processes and are allowed. See <a href="#privacy">Privacy</a> for why.</p></div>
+
+<h2 id="config">Config</h2>
+<p><code>.laminator/config.json</code> is plain JSON, meant to be read and argued with. The
+<code>overrides</code> block survives a re-scan; everything else is regenerated.</p>
+<pre><code>{
+  <span class="s">"overrides"</span>: {
+    <span class="s">"surfaceRoot"</span>:   <span class="s">""</span>,   <span class="c">// selector for your app's main container</span>
+    <span class="s">"includeStyles"</span>: [],   <span class="c">// stylesheets the scan missed</span>
+    <span class="s">"excludeStyles"</span>: []    <span class="c">// stylesheets it must never write to</span>
+  }
+}</code></pre>
+
+<h2 id="privacy">Privacy and safety</h2>
+<ul>
+  <li>Binds to <strong>127.0.0.1</strong> only — never <code>0.0.0.0</code>, so nothing on your network reaches it.</li>
+  <li><strong>Zero dependencies.</strong> Nothing is fetched at install beyond the package itself.</li>
+  <li>Any page you visit can send a request to localhost — the browser blocks it from <em>reading</em> the
+    reply, but not from making it. Since this server writes stylesheets, every mutating request from a page
+    must carry a token minted at <code>init</code>, and the script carrying it is only served to localhost
+    origins.</li>
+  <li>The write endpoint takes a file, a line, a property and a value. <strong>There is no free-text
+    write</strong>, and the file must be one the scan listed as editable.</li>
+  <li><code>.laminator/</code> carries its own <code>.gitignore</code> of <code>*</code>.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+<h3>Does this work without an AI agent?</h3>
+<p>Yes. Send writes the review file and copies the prompt whatever you have installed. The agent is the
+convenience, not the requirement.</p>
+<h3>My project is all Tailwind. Is it useless?</h3>
+<p>No, but be clear-eyed: there is no rule to point at, so findings come back as <code>utility</code> with
+the class list, the component name and the computed styles. That is still far more than a screenshot.</p>
+<h3>It says "no authored rule" for everything.</h3>
+<p>Run <code>laminator doctor</code>. If it reports <code>0 editable</code> stylesheets, the scan found
+none — add them to <code>overrides.includeStyles</code> and re-scan.</p>
+<h3>A finding points at the wrong line.</h3>
+<p>The stylesheet changed since the scan. Run <code>laminator scan</code>.</p>
+<h3>Can I self-host these docs?</h3>
+<p>They are one static HTML file in <code>site/</code>. <code>npm run site</code> serves it; it deploys to
+Railway, Vercel, Netlify or any static host unchanged.</p>
+
+<footer>
+  <a href="https://github.com/Alphapatil-26/Laminator">GitHub</a>
+  <a href="#install">Install</a>
+  <a href="#api">API</a>
+  <span>MIT · built to be read</span>
+</footer>
+
+</main>
+</div>
+
+<script>
+// Highlight the section you are actually reading. IntersectionObserver rather
+// than scroll maths: it fires only when a heading crosses the line, which is
+// both cheaper and correct when sections are shorter than the viewport.
+const links = [...document.querySelectorAll('nav a[href^="#"]')]
+const byId = new Map(links.map(a => [a.getAttribute('href').slice(1), a]))
+const seen = new Set()
+const io = new IntersectionObserver((entries) => {
+  for (const e of entries) e.isIntersecting ? seen.add(e.target.id) : seen.delete(e.target.id)
+  const first = [...byId.keys()].find(id => seen.has(id))
+  if (!first) return
+  links.forEach(a => a.classList.toggle('on', a === byId.get(first)))
+}, { rootMargin: '0px 0px -70% 0px' })
+document.querySelectorAll('h1[id],h2[id]').forEach(h => io.observe(h))
+</script>
+</body>
+</html>

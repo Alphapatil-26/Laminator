@@ -1,0 +1,45 @@
+{
+    "name": "laminator",
+    "version": "0.1.0",
+    "description": "Point at anything in your running app and hand a coding agent the file:line that paints it. Entirely local, zero dependencies.",
+    "type": "module",
+    "bin": {
+        "laminator": "./bin/laminator.mjs"
+    },
+    "exports": {
+        ".": "./src/index.mjs",
+        "./client": "./src/client/overlay.js"
+    },
+    "files": [
+        "bin",
+        "src",
+        "templates",
+        "AGENTS.md",
+        "README.md"
+    ],
+    "engines": {
+        "node": ">=18"
+    },
+    "scripts": {
+        "test": "node --test test/*.test.mjs",
+        "start": "node site/serve.mjs",
+        "site": "node site/serve.mjs"
+    },
+    "keywords": [
+        "devtools",
+        "annotation",
+        "css",
+        "ai-agent",
+        "local-first"
+    ],
+    "license": "MIT",
+    "dependencies": {},
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Alphapatil-26/Laminator.git"
+    },
+    "homepage": "https://github.com/Alphapatil-26/Laminator#readme",
+    "bugs": {
+        "url": "https://github.com/Alphapatil-26/Laminator/issues"
+    }
+}
