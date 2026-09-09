@@ -1,10 +1,9 @@
 // Answering "what paints this element", and changing it.
 //
-// The browser cannot read the project's source, and the server cannot run
-// `element.matches()`. So the work is split at exactly that seam: the server
-// proposes CANDIDATES from the selector index, and the page confirms which of
-// them actually match the element in front of it. Neither side has to be right
-// on its own, which is why the index is allowed to be approximate.
+// The browser cannot read the source and the server cannot run
+// element.matches(), so the work splits at that seam: the server proposes
+// candidates from the index, the page confirms which ones match. Neither side
+// has to be right alone, which is why the index can be approximate.
 
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -19,8 +18,7 @@ async function declarationsAt(abs, line) {
         return { declarations: {}, body: '', start: -1, end: -1 }
     }
     const lines = src.split('\n')
-    // The prelude may wrap, so the brace is found by scanning forward from the
-    // recorded line rather than assumed to be on it.
+    // The prelude may wrap, so scan forward for the brace.
     let idx = 0
     for (let i = 0; i < line - 1 && i < lines.length; i++) idx += lines[i].length + 1
     const open = src.indexOf('{', idx)
@@ -34,8 +32,7 @@ async function declarationsAt(abs, line) {
     }
     const body = src.slice(open + 1, i - 1)
     const declarations = {}
-    // Split on top-level semicolons only: a `url(a;b)` or a nested block would
-    // otherwise be torn in half.
+    // Top-level semicolons only, or url(a;b) gets torn in half.
     let buf = ''
     let d = 0
     for (const ch of body) {
@@ -57,10 +54,9 @@ async function declarationsAt(abs, line) {
 /**
  * Candidate rules for a set of tokens.
  *
- * Ordered most-specific-token-first so the page checks the likeliest anchors
- * before the generic ones. Capped, because an element carrying a utility class
- * used in four hundred rules would otherwise return four hundred rules and the
- * page would spend longer confirming than the whole lookup was meant to save.
+ * Capped: an element carrying a utility class used in four hundred rules would
+ * otherwise return four hundred rules, and the page would spend longer
+ * confirming them than the lookup saved.
  */
 export async function candidates(root, config, tokenList, limit = 60) {
     const index = await readIndex(root)
@@ -76,8 +72,7 @@ export async function candidates(root, config, tokenList, limit = 60) {
         }
         if (out.length >= limit) break
     }
-    // Declarations are read only for what survived the cap — reading them for
-    // every candidate is most of the cost of this endpoint.
+    // Only for what survived the cap. This is most of the endpoint's cost.
     const writable = writableStyles(config)
     for (const r of out) {
         const abs = writable.get(r.file)
@@ -94,13 +89,11 @@ export async function candidates(root, config, tokenList, limit = 60) {
 }
 
 /**
- * Change ONE declaration inside a rule the scan says is writable.
+ * Change one declaration inside a rule the scan says is writable.
  *
- * Deliberately narrow. There is no free-text write and never will be: the
- * endpoint takes a file, a line, a property and a value, resolves the file
- * against the scan's allowlist, and rewrites one declaration in place. A dev
- * tool that can write arbitrary bytes into arbitrary files is a different and
- * much more dangerous thing than this one.
+ * The endpoint takes a file, a line, a property and a value. There is no
+ * free-text write, because a dev tool that can put arbitrary bytes into
+ * arbitrary files is a much more dangerous thing than this one.
  */
 export async function edit(root, config, { file, line, property, value }) {
     const writable = writableStyles(config)
@@ -108,9 +101,8 @@ export async function edit(root, config, { file, line, property, value }) {
     if (!abs) return { ok: false, why: `${file} is not in this project's writable stylesheets` }
     if (!/^[-a-zA-Z][\w-]*$/.test(String(property ?? ''))) return { ok: false, why: 'bad property name' }
     const v = String(value ?? '')
-    // A value containing a brace or a semicolon could close the rule and open
-    // something else. Refused rather than escaped: there is no legitimate
-    // declaration value here that needs them.
+    // A brace or semicolon could close the rule and open something else. No
+    // legitimate value here needs them, so refuse instead of escaping.
     if (/[{};]/.test(v)) return { ok: false, why: 'value may not contain { } or ;' }
 
     const src = await fs.readFile(abs, 'utf8')
@@ -133,8 +125,7 @@ export async function edit(root, config, { file, line, property, value }) {
     const next = src.slice(0, start) + nextBody + src.slice(end)
     await fs.writeFile(abs, next, 'utf8')
 
-    // A change log, so a session's edits can be read back as a list rather than
-    // reconstructed from a diff.
+    // So a session's edits can be read back as a list.
     const log = path.join(root, '.laminator', 'changes.log')
     const verb = previous === null ? 'add' : 'change'
     const shown = previous === null ? `${property}: ${v}` : `${property}: ${previous} -> ${v}`

@@ -1,10 +1,7 @@
-// The annotation queue, on disk, in the project being reviewed.
+// The annotation queue, on disk under .laminator/.
 //
-// Everything lives under `.laminator/` beside the scan, and the folder carries a
-// `.gitignore` of `*` so a review session never shows up in `git status`. The
-// records are AFS v1.1 (agentation.dev/schema/annotation.v1.1.json) plus a
-// `laminator` extension, so a queue written here is readable by anything that
-// already understands that schema rather than being a private shape.
+// Records are AFS v1.1 (agentation.dev/schema/annotation.v1.1.json) with a
+// `laminator` extension, so anything that reads AFS can read this queue.
 
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -39,13 +36,9 @@ export async function write(root, list) {
 /**
  * Write one finding's screenshot and return its repo-relative path.
  *
- * The image never goes in `queue.json`. Base64 is ~1.4x the bytes and the queue
- * is read, rewritten and polled every three seconds — inlining even a handful
- * would turn a 20 KB file into a megabyte one and make every poll carry it.
- *
- * `id` arrives from a POST body and is about to become a FILENAME. Anything but
- * the shape the server itself mints is refused outright rather than sanitised:
- * a "cleaned" path is still a path somebody else chose.
+ * Kept out of queue.json, which is polled every three seconds; base64 would put
+ * a megabyte on every poll. The id becomes a filename, so anything but the
+ * shape the server mints is refused. A cleaned path is still somebody else's.
  */
 export async function writeShot(root, id, dataUrl) {
     if (typeof dataUrl !== 'string') return null
@@ -66,9 +59,8 @@ export async function writeShot(root, id, dataUrl) {
 
 export async function add(root, incoming, shot) {
     const list = await read(root)
-    // The SERVER stamps identity and time. A browser clock that is wrong, or an
-    // id that collides after a reload, would corrupt the queue silently — and
-    // the page has no way to find out either happened.
+    // Stamped here. A wrong browser clock or an id that collides after a reload
+    // would corrupt the queue with nothing to show for it.
     const item = {
         ...incoming,
         id: `ann_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
@@ -83,17 +75,15 @@ export async function add(root, incoming, shot) {
 }
 
 /**
- * What the tool cost and what it avoided.
+ * What the tool cost and what it avoided, in bytes.
  *
- * BYTES, not tokens. A chars-per-token constant was measured against real agent
- * transcripts twice while building this and both answers were implausible
- * (0.99, then 1.82, where prose is nearer 3.5-4), because those usage records
- * cover internal work whose text is not stored. Rather than publish a number
- * that was not measured, the unit that CAN be measured is reported.
+ * Not tokens. A chars-per-token constant was measured twice against real agent
+ * transcripts and came back at 0.99 then 1.82, where prose is nearer 3.5, so
+ * the figure is not published. Bytes can be measured, so bytes are reported.
  *
- * Deliberately conservative: each stylesheet counts once per batch however many
+ * Conservative on purpose: a stylesheet counts once per batch however many
  * findings point into it, unanchored findings score zero, and the review file's
- * own size is subtracted rather than ignored.
+ * own size is subtracted.
  */
 export async function ledger(root, entry) {
     const file = rel(root, 'savings.json')
@@ -104,7 +94,7 @@ export async function ledger(root, entry) {
     } catch { /* first run */ }
     if (entry) {
         data.entries.push(entry)
-        // Bounded: a dev ledger, not an audit log.
+        // Bounded. This is a dev ledger.
         if (data.entries.length > 200) data.entries = data.entries.slice(-200)
         await ensure(root)
         await fs.writeFile(file, JSON.stringify(data, null, 2), 'utf8')
@@ -120,8 +110,8 @@ export async function ledger(root, entry) {
     return sum
 }
 
-/** Stylesheet bytes an anchored batch made unnecessary to read. Deduplicated by
- *  file: three findings in one sheet save reading it once, not three times. */
+/** Stylesheet bytes an anchored batch saved reading. Counted once per file:
+ *  three findings in one sheet still only save reading it once. */
 export async function avoided(root, list, writable) {
     const want = new Set()
     let anchored = 0
@@ -144,8 +134,7 @@ export async function update(root, id, patch) {
     const list = await read(root)
     const i = list.findIndex((a) => a.id === id)
     if (i < 0) return null
-    // `id` is never patchable: a record whose identity can change cannot be
-    // referred to by the agent that is working it.
+    // id is never patchable, or the agent loses track of what it is working on.
     const { id: _drop, ...safe } = patch ?? {}
     void _drop
     const next = { ...list[i], ...safe }
@@ -181,12 +170,7 @@ export async function remove(root, id) {
 
 export const isOpen = (a) => a.status !== 'resolved' && a.status !== 'dismissed'
 
-/**
- * The review file an agent is pointed at.
- *
- * One renderer, every detail level, because four would drift and the drift
- * would only show up when somebody compared two exports side by side.
- */
+/** The review file an agent is pointed at. */
 export function toMarkdown(list, config, { brief } = {}) {
     const open = list.filter(isOpen)
     const out = []
@@ -206,8 +190,7 @@ export function toMarkdown(list, config, { brief } = {}) {
 
     const b = brief?.trim()
     if (b) {
-        // Above the findings on purpose: it changes how they should be read, and
-        // a reader who meets it afterwards has already formed a view.
+        // Above the findings, since it changes how they should be read.
         out.push('## Standing context from the owner')
         out.push('')
         out.push(b)
@@ -244,8 +227,7 @@ export function toMarkdown(list, config, { brief } = {}) {
                 )
             }
         } else if (a.laminator?.styling === 'utility') {
-            // Said outright. An agent handed a record with no anchor goes looking
-            // for a stylesheet rule that does not exist.
+            // Otherwise an agent goes hunting for a rule that does not exist.
             out.push(`**No stylesheet rule.** This element is styled by utility classes — edit the \`class\` attribute.`)
             if (a.cssClasses) out.push(`**Classes:** \`${a.cssClasses}\``)
         } else {

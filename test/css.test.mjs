@@ -2,25 +2,21 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { indexRules, rules, tokens } from '../src/scan/css.mjs'
 
-// The parser is the whole tool's foundation: every anchor laminator ever reports
-// is a line number this produced. A wrong line does not throw — it sends someone
-// to the wrong part of a real file, which reads as the tool being useless rather
-// than as the tool being broken.
+// Every anchor Laminator reports is a line number this parser produced. A wrong
+// one does not throw. It sends someone to the wrong part of a real file, which
+// reads as the tool being useless rather than broken.
 
 describe('rules()', () => {
-    it('reports the line the rule STARTS on', () => {
+    it('reports the line a rule starts on', () => {
         const css = ['.a { color: red }', '', '.b {', '  color: blue;', '}'].join('\n')
         const r = rules(css)
         assert.equal(r.length, 2)
         assert.deepEqual(r.map((x) => [x.prelude, x.line]), [['.a', 1], ['.b', 3]])
     })
 
-    // THE ONE THAT MATTERS MOST. Comments are where a naive parser loses count,
-    // and every later anchor in the file is then wrong by the same amount.
-    //
-    // NEGATIVE CONTROL (run 2026-09-09): make `decomment` return
-    // `src.replace(/\/\*[\s\S]*?\*\//g, '')` — dropping the newlines instead of
-    // preserving them — and this goes red: `.after` is reported at line 2.
+    // Comments are where a naive parser loses count, and every later anchor in
+    // the file is then wrong by the same amount.
+    // To break it: have decomment() drop the newlines instead of blanking them.
     it('keeps line numbers true across multi-line comments', () => {
         const css = ['/* one', '   two', '   three */', '.after { color: red }'].join('\n')
         assert.deepEqual(rules(css).map((x) => [x.prelude, x.line]), [['.after', 4]])
@@ -34,9 +30,8 @@ describe('rules()', () => {
         assert.deepEqual(r.at, ['@media (min-width: 40em)'])
     })
 
-    // NEGATIVE CONTROL (run 2026-09-09): remove `@keyframes` from the OPAQUE
-    // pattern and this goes red — `from`, `to` and `50%` are parsed as
-    // selectors and land in the index as rules that can never match anything.
+    // To break it: drop @keyframes from OPAQUE, and `from`, `to` and `50%`
+    // land in the index as rules nothing can ever match.
     it('does not mistake keyframe steps for selectors', () => {
         const css = [
             '@keyframes spin { from { transform: none } 50% { opacity: .5 } to { opacity: 1 } }',
@@ -77,12 +72,10 @@ describe('tokens()', () => {
         assert.deepEqual(tokens('.card .title#main[data-open]').sort(), ['#main', '.card', '.title', '[data-open]'])
     })
 
-    // A bare tag matches half a page. Indexing `div` makes every lookup return
-    // everything, which is the same as having no index at all.
-    //
-    // NEGATIVE CONTROL (run 2026-09-09): add a `\b[a-z][\w-]*\b` pattern to
-    // `tokens` and this goes red — `div` and `p` enter the index.
-    it('does NOT index bare tag selectors', () => {
+    // A bare tag matches half a page, so indexing `div` makes every lookup
+    // return everything.
+    // To break it: add a bare-word pattern to tokens().
+    it('leaves bare tag selectors out of the index', () => {
         assert.deepEqual(tokens('div p'), [])
         assert.deepEqual(tokens('button.cta'), ['.cta'])
     })

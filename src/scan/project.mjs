@@ -1,18 +1,13 @@
-// Working out what somebody else's project actually is.
+// Working out what a project is: stylesheets, framework, where the code lives.
 //
-// Everything the Zavio version of this tool hardcoded — which stylesheets exist,
-// where components live, what the app's root element is — is discovered here
-// instead. The rule throughout: report what was FOUND, and say when nothing was.
-// A scanner that quietly substitutes a default for a thing it could not find
-// produces a tool that fails later, somewhere else, for reasons nobody can
-// trace back to the scan.
+// Everything here reports what it found and says so when it found nothing. A
+// scanner that quietly substitutes a default fails later, somewhere else, for
+// reasons nobody can trace back to the scan.
 
 import { promises as fs } from 'fs'
 import path from 'path'
 
-/** Directories never worth walking. Not configurable on purpose: every one of
- *  these is either generated, vendored, or enormous, and a project that keeps
- *  authored CSS in `node_modules` has a bigger problem than this tool. */
+/** Directories never worth walking: generated, vendored, or enormous. */
 const SKIP_DIRS = new Set([
     'node_modules', '.git', '.next', '.nuxt', '.svelte-kit', '.turbo', '.cache',
     'dist', 'build', 'out', 'coverage', 'vendor', 'target', '__pycache__',
@@ -26,22 +21,20 @@ const CODE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js', '.vue', '.svelte', '.ast
 const GENERATED = [
     /\.min\.css$/i,
     /(^|[\\/])(dist|build|out|public|static|assets)[\\/].*\.css$/i,
-    // A CSS module's class names are HASHED at build time, so a selector seen in
-    // the browser cannot be matched back to this source. Indexing it would
-    // produce anchors that look right and point nowhere.
+    // A CSS module's class names are hashed at build time, so a selector seen
+    // in the browser cannot be traced back here. An anchor into one would look
+    // right and point nowhere.
     /\.module\.(css|scss|sass|less)$/i,
 ]
 
 export const isGenerated = (rel) => GENERATED.some((re) => re.test(rel))
 
 /**
- * Walk a project, cheaply and with a ceiling.
+ * Walk a project, with a ceiling on how much.
  *
- * The ceiling is not defensive padding: a scan that walks a monorepo for two
- * minutes gets cancelled by the person waiting, and a tool whose first
- * impression is a hang does not get a second run. When it is hit, the caller is
- * TOLD, rather than being handed a silently partial picture — a half-indexed
- * project answers "no rule found" exactly like a correctly-indexed one.
+ * A scan that grinds through a monorepo for two minutes gets cancelled by the
+ * person waiting. When the ceiling is hit the caller is told, because a
+ * half-indexed project answers "no rule found" exactly like a complete one.
  */
 export async function walk(root, { maxFiles = 20000, maxDepth = 12 } = {}) {
     const files = []
@@ -89,9 +82,9 @@ async function readJSON(file) {
 /**
  * Which framework and styling approach this project uses.
  *
- * Read from package.json rather than guessed from file extensions: a repo can
- * contain one .vue file in a docs folder and not be a Vue app, and being wrong
- * about this changes what the review command tells an agent to do.
+ * Read from package.json. File extensions lie: a repo can hold one .vue file in
+ * a docs folder and not be a Vue app, and this answer shapes what the review
+ * command tells an agent to do.
  */
 export async function detect(root, files) {
     const pkg = (await readJSON(path.join(root, 'package.json'))) ?? {}
@@ -108,8 +101,7 @@ export async function detect(root, files) {
     if (has('@angular/core')) frameworks.push('angular')
 
     const styling = []
-    // Tailwind is detected from a config file as well as the dependency: v4
-    // projects often carry only a `@import "tailwindcss"` line and a plugin.
+    // Also from the config file: v4 projects often carry only an @import line.
     const tailwindCfg = files.find((f) => /^tailwind\.config\.[cm]?[jt]s$/.test(f))
     if (has('tailwindcss') || tailwindCfg) styling.push('tailwind')
     if (has('styled-components')) styling.push('styled-components')
@@ -121,7 +113,6 @@ export async function detect(root, files) {
         name: pkg.name ?? path.basename(root),
         frameworks,
         styling,
-        // What the agent should be told to run. Absent is reported as absent.
         scripts: {
             dev: pkg.scripts?.dev ?? pkg.scripts?.start ?? null,
             test: pkg.scripts?.test ?? null,
@@ -138,7 +129,7 @@ export async function detect(root, files) {
     }
 }
 
-/** The stylesheets worth indexing, and the ones deliberately left out. */
+/** The stylesheets worth indexing, and the ones left out. */
 export function classifyStyles(files) {
     const editable = []
     const excluded = []
@@ -158,8 +149,8 @@ export function classifyStyles(files) {
     return { editable, excluded }
 }
 
-/** Where components live — used to tell an agent where to look for a Tailwind
- *  class list, which has no stylesheet to point at. */
+/** Where components live. Tailwind findings have no stylesheet to point at, so
+ *  the agent gets these directories to search instead. */
 export function sourceRoots(files) {
     const counts = new Map()
     for (const f of files) {

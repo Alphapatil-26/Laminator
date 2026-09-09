@@ -1,11 +1,10 @@
 // Serves the docs. Used by `npm run site` locally and as the start command on
 // Railway or any other host.
 //
-// This is the ONLY part of Laminator that is meant to be reachable from a
-// network, so it is deliberately the dullest: it binds to 0.0.0.0 (a container
-// has to), serves exactly the files in this folder, and does nothing else. It
-// shares no code with the tool's own sidecar, which binds to 127.0.0.1 and can
-// write to your source — keeping those two apart is the point of the split.
+// The only part of Laminator meant to be reachable from a network, so it is the
+// dullest thing here: binds to 0.0.0.0 because a container has to, serves the
+// files in this folder, does nothing else. It shares no code with the tool's own
+// sidecar, which stays on 127.0.0.1 and can write to your source.
 
 import { createServer } from 'http'
 import { promises as fs } from 'fs'
@@ -31,10 +30,8 @@ createServer(async (req, res) => {
     let rel = decodeURIComponent(url.pathname)
     if (rel.endsWith('/')) rel += 'index.html'
 
-    // Resolve first, then check containment. A request for `/../../etc/passwd`
-    // resolves to a real path outside this folder, and the only reliable way to
-    // refuse it is to compare the RESOLVED path — not to look for `..` in the
-    // string, which misses every encoding of it.
+    // Resolve first, then check containment. Looking for `..` in the string
+    // misses every encoding of it; comparing the resolved path does not.
     const file = path.resolve(HERE, '.' + rel)
     if (file !== HERE && !file.startsWith(HERE + path.sep)) {
         res.writeHead(403, { 'content-type': 'text/plain' })
@@ -45,8 +42,8 @@ createServer(async (req, res) => {
         const buf = await fs.readFile(file)
         res.writeHead(200, {
             'content-type': TYPES[path.extname(file)] ?? 'application/octet-stream',
-            // Short, not immutable: this is one hand-edited page, and a stale
-            // copy of the install instructions is worse than a re-fetch.
+            // Short. A stale copy of the install instructions costs more than
+            // a re-fetch does.
             'cache-control': 'public, max-age=300',
             'x-content-type-options': 'nosniff',
         })

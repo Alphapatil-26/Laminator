@@ -18,9 +18,9 @@
    #16181D ink. Light first; dark redefines the same names, so nothing is
    ever declared only inside a media query.
 
-   The dark ramp is deliberately spaced apart. An earlier version put paper,
-   card, wash and hair within a few points of each other and everything with
-   a border or a soft fill — chips, key caps, ghost buttons — disappeared.
+   The dark ramp is spaced wide on purpose. An earlier version put paper, card,
+   wash and hair within a few points of each other, and everything drawn with a
+   border or a soft fill vanished: chips, key caps, ghost buttons.
    ═══════════════════════════════════════════════════════════════════════ */
 :root{
   --brand:#2F6DF6; --layer:#93B4FC; --ink:#16181D; --paper:#fff;
@@ -34,17 +34,17 @@
   --sans:"Geist",-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Inter,system-ui,sans-serif;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
 
-  /* transitions.dev — texts reveal (18) */
+  /* transitions.dev: texts reveal (18) */
   --stagger-dur:500ms; --stagger-distance:12px; --stagger-stagger:40ms;
   --stagger-blur:3px; --stagger-ease:cubic-bezier(0.22, 1, 0.36, 1);
-  /* transitions.dev — tabs sliding (16) */
+  /* transitions.dev: tabs sliding (16) */
   --tabs-dur:250ms; --tabs-ease:cubic-bezier(0.22, 1, 0.36, 1);
   --tabs-text-muted:rgba(86,93,109,.85); --tabs-text-active:#16181D;
   --tabs-bar-bg:#eaedf3; --tabs-pill-bg:#fff;
-  /* transitions.dev — accordion (21) */
+  /* transitions.dev: accordion (21) */
   --acc-expand:250ms; --acc-collapse:250ms; --acc-chevron:250ms;
   --acc-ease:cubic-bezier(0.22, 1, 0.36, 1);
-  /* transitions.dev — success check (10) */
+  /* transitions.dev: success check (10) */
   --check-opacity-dur:500ms; --check-rotate-dur:500ms; --check-rotate-from:80deg;
   --check-bob-dur:500ms; --check-y-amount:40px; --check-blur-dur:500ms;
   --check-blur-from:10px; --check-path-dur:500ms; --check-path-delay:80ms;
@@ -850,9 +850,9 @@ const io = new IntersectionObserver((entries, obs) => {
 document.querySelectorAll('.reveal.t-stagger').forEach((n) => io.observe(n))
 
 // ══ The try-it demo ════════════════════════════════════════════════════
-// Every value below is what Laminator would really report for that element in
-// the demo project the tests use — same stylesheets, same line numbers. The
-// point of a live demo is lost if the numbers in it are made up.
+// Every value below is what Laminator would really report for that element,
+// taken from the demo project the tests run against: same stylesheets, same
+// line numbers. A live demo with invented numbers in it proves nothing.
 const PICKS = {
   title: { path: 'main > h1.hero-title', file: 'styles/site.css', line: 22, kin: 1,  say: 'this heading is too tight' },
   sub:   { path: 'main > p.hero-sub',    file: 'styles/site.css', line: 23, kin: 1,  say: 'reads a bit flat' },

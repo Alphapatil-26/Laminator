@@ -1,12 +1,8 @@
 #!/usr/bin/env node
-// laminator — point at anything in your running app, hand an agent the file:line.
-//
-// Four verbs and no configuration to write by hand:
-//
-//   laminator init     scan the project, write the command file, print the snippet
-//   laminator          scan if needed, then serve
-//   laminator scan     re-read the project after you have moved CSS around
-//   laminator doctor   say what it found and what it could not
+// laminator init     scan the project and print the script tag
+// laminator          serve, scanning first if it never has
+// laminator scan     re-read the project after moving CSS around
+// laminator doctor   what it found, and what it could not
 
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -25,8 +21,7 @@ const flag = (name, fallback) => {
 const root = path.resolve(flag('root', process.cwd()))
 const port = Number(flag('port', 7317))
 
-// Escaped, not a literal ESC byte: a raw control character in source is
-// invisible in a diff and is dropped by anything that normalises text.
+// Escaped, since a raw control byte is invisible in a diff.
 const E = '['
 const b = (s) => E + '1m' + s + E + '0m'
 const dim = (s) => E + '2m' + s + E + '0m'
@@ -89,9 +84,8 @@ async function writeCommandFile(config) {
 
     await fs.writeFile(path.join(root, '.laminator', 'review-ui.md'), filled, 'utf8')
 
-    // Claude Code reads slash commands from `.claude/commands`. Written only if
-    // that directory already exists — creating it would be this tool deciding
-    // which agent you use.
+    // Only if .claude already exists. Creating it would be this tool picking
+    // your agent for you.
     const claudeDir = path.join(root, '.claude', 'commands')
     try {
         await fs.access(path.join(root, '.claude'))

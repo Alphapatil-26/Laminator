@@ -1,18 +1,19 @@
-// Reading a project's stylesheets well enough to answer "what paints this?"
+// Reading stylesheets well enough to answer "what paints this?".
 //
-// WHY A HAND-WRITTEN PARSER AND NOT POSTCSS. This package has zero dependencies
-// on purpose: it is a local dev tool people are asked to run inside their own
-// repo, and "install these 40 transitive packages first" is the thing that stops
-// them. What is needed here is much less than a CSS parser — every rule's
-// PRELUDE and its LINE NUMBER — and that is a small, testable amount of work.
-// Declarations are never parsed; the server re-reads the exact bytes when an
-// edit is made, so nothing here has to round-trip.
+// Hand-written because all we need is each rule's prelude and its line number.
+// Declarations are left alone; the server re-reads the exact bytes when an edit
+// is made, so nothing here has to round-trip. Keeping it to that avoids a
+// PostCSS dependency in a package that has none.
 //
-// WHAT IT DELIBERATELY GETS "WRONG": it does not resolve `@import`, does not
-// expand nesting into full selectors, and does not evaluate `@supports`. A
-// nested rule is indexed under its own tokens, which is enough to find it —
-// the browser confirms the real match with `element.matches()`, so this side
-// only has to be a good CANDIDATE generator, never an authority.
+// It does not resolve @import, expand nesting into full selectors, or evaluate
+// @supports. A nested rule is indexed under its own tokens, which is enough to
+// find it. The browser confirms the real match with element.matches(), so this
+// side only has to generate good candidates.
+//
+// TODO: Sass and Less nesting is indexed by the tokens on each nested rule, so
+// `&:hover` lands under whatever classes it mentions and not under the parent's.
+// Finds the right file and line; the prelude shown is the fragment, not the
+// resolved selector.
 
 /** Strip comments without disturbing line numbering. */
 function decomment(src) {
@@ -42,14 +43,12 @@ function decomment(src) {
 }
 
 /**
- * Every rule in a stylesheet: its prelude, its line, and the at-rules above it.
+ * Every rule in a stylesheet: prelude, line, and the at-rules wrapping it.
  *
- * At-rules that CONTAIN rules (`@media`, `@supports`, `@layer`, `@container`)
- * are descended into and recorded as context, because "this only applies in
- * dark mode" is exactly the kind of thing a reader needs and a flat list of
- * selectors destroys. At-rules whose bodies are not rules (`@keyframes`,
- * `@font-face`, `@property`) are skipped whole — their inner blocks look like
- * selectors (`from`, `0%`) and would pollute the index with nonsense.
+ * @media, @supports, @layer and @container are descended into and kept as
+ * context, since "only in dark mode" is worth knowing. @keyframes, @font-face
+ * and @property are skipped whole: their inner blocks look like selectors
+ * (`from`, `0%`) and would land in the index as rules nothing can match.
  */
 export function rules(src) {
     const text = decomment(src)
@@ -99,8 +98,7 @@ export function rules(src) {
                 stack.push(prelude)
             } else if (prelude) {
                 found.push({ prelude, line: bufLine, at: [...stack] })
-                // A rule's body may itself contain nested rules; treat it as a
-                // context frame so they are found too.
+                // The body may contain nested rules, so push a context frame.
                 stack.push(prelude)
             } else {
                 stack.push('')
@@ -117,8 +115,8 @@ export function rules(src) {
             continue
         }
         if (ch === ';' && !buf.includes('{')) {
-            // A declaration, or an @import/@charset statement. Either way it is
-            // not a rule and the buffer must not leak into the next prelude.
+            // A declaration or an @import statement. Either way the buffer must
+            // not leak into the next prelude.
             buf = ''
             i++
             bufLine = line
@@ -131,14 +129,11 @@ export function rules(src) {
 }
 
 /**
- * The tokens a prelude could be looked up by.
+ * The tokens a prelude can be looked up by: classes, ids, attribute names.
  *
- * Classes, ids and attribute names — the things that identify an element in a
- * browser. Bare tag selectors are DELIBERATELY not indexed: `div` matches half
- * a page, so indexing it makes every lookup return everything and the index
- * stops narrowing anything. The browser's own `matches()` is what confirms a
- * candidate, so a slightly narrow index costs nothing and a wide one costs
- * every query.
+ * Bare tag selectors are left out. `div` matches half a page, so indexing it
+ * makes every lookup return everything. The browser confirms candidates itself,
+ * so a narrow index costs nothing and a wide one costs every query.
  */
 export function tokens(prelude) {
     const out = new Set()
@@ -149,13 +144,12 @@ export function tokens(prelude) {
 }
 
 /**
- * Build the lookup: token → the rules that mention it.
+ * Build the lookup: token to the rules that mention it.
  *
- * This is the "query tree" the whole tool rests on. Without it, answering "what
- * paints this element" means reading every stylesheet in the project on every
- * question; with it, the browser sends one token and gets back a handful of
- * candidates to confirm. On a large app that is the difference between a
- * hundred kilobytes per click and a few hundred bytes.
+ * Without it, answering "what paints this" means reading every stylesheet on
+ * every question. With it the browser sends one token and gets back a handful
+ * of candidates. On a large app that is a few hundred bytes per click instead
+ * of a few hundred kilobytes.
  */
 export function indexRules(files) {
     const index = new Map()
@@ -173,5 +167,5 @@ export function indexRules(files) {
     return { index, count }
 }
 
-/** Serialisable form — a Map does not survive JSON. */
+/** A Map does not survive JSON. */
 export const indexToJSON = (index) => Object.fromEntries([...index].map(([k, v]) => [k, v]))

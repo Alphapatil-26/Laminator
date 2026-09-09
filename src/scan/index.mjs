@@ -1,16 +1,9 @@
-// The scan: everything the tool needs to know about a project it has never seen.
+// The scan. Writes two files and nothing else:
 //
-// Runs once at `laminator init` and again whenever `laminator scan` is asked for.
-// It writes two files and nothing else:
+//   .laminator/config.json   frameworks, styling, which stylesheets are editable
+//   .laminator/index.json    selector token -> candidate rules
 //
-//   .laminator/config.json   what this project IS — frameworks, styling, which
-//                           stylesheets may be edited, and which may not
-//   .laminator/index.json    the selector index: token -> candidate rules
-//
-// Both are plain JSON on purpose. A person who wants to know why the tool
-// pointed at a line can open the index and see, and a person who disagrees with
-// the scan can edit the config by hand. A tool that decides things about your
-// repo inside a binary cache is one you cannot argue with.
+// Both are plain JSON so you can open them and argue with what the scan decided.
 
 import { randomBytes } from 'crypto'
 import { promises as fs } from 'fs'
@@ -21,9 +14,8 @@ import { classifyStyles, detect, sourceRoots, walk } from './project.mjs'
 export const DIR = '.laminator'
 
 export async function scan(root, { onProgress } = {}) {
-    // A re-scan must NOT mint a new token: the overlay already in a browser tab
-    // carries the old one, and silently invalidating it turns every later click
-    // into an unexplained 401.
+    // A re-scan keeps the old token. Minting a new one would 401 every click in
+    // any tab that still has the overlay loaded.
     const existing = await readConfig(root)
     const started = Date.now()
     onProgress?.('walking the project')
@@ -43,8 +35,6 @@ export async function scan(root, { onProgress } = {}) {
             bytes += Buffer.byteLength(src, 'utf8')
             loaded.push({ file: rel, src })
         } catch {
-            // Unreadable is not fatal — it is one fewer place to look, and the
-            // count below will not match `editable`, which is the honest signal.
         }
     }
 
@@ -54,9 +44,8 @@ export async function scan(root, { onProgress } = {}) {
     const config = {
         version: 1,
         scannedAt: new Date().toISOString(),
-        // Shared secret between this server and the overlay it serves. Kept in
-        // a gitignored file; see the header of server/index.mjs for what it
-        // actually defends against.
+        // Shared with the overlay this server hands out. server/index.mjs says
+        // what it defends against.
         token: existing?.token ?? randomBytes(24).toString('hex'),
         root: path.resolve(root),
         project,
@@ -74,11 +63,9 @@ export async function scan(root, { onProgress } = {}) {
             tokens: index.size,
             tookMs: Date.now() - started,
         },
-        // Everything below is meant to be edited by hand when the scan guesses
-        // wrong; nothing regenerates them except an explicit `laminator scan`.
+        // Hand-edit these when the scan guesses wrong. They survive a re-scan.
         overrides: existing?.overrides ?? {
-            /** Selector for the app's main surface, used to keep element paths
-             *  short. Empty means "work it out from the document". */
+            /** The app's main container. Empty means work it out. */
             surfaceRoot: '',
             /** Extra stylesheets to treat as editable, if the scan missed one. */
             includeStyles: [],
@@ -93,8 +80,7 @@ export async function scan(root, { onProgress } = {}) {
 export async function write(root, { config, index }) {
     const dir = path.join(root, DIR)
     await fs.mkdir(dir, { recursive: true })
-    // The whole directory is working state, not source. Written once so a scan
-    // never turns up in `git status` and surprise anybody.
+    // Working state, so it stays out of git status.
     const ignore = path.join(dir, '.gitignore')
     try {
         await fs.access(ignore)
@@ -125,10 +111,9 @@ export async function readIndex(root) {
 /**
  * The stylesheets the server will accept an edit to.
  *
- * The scan's answer plus the config's overrides, resolved to absolute paths and
- * checked to be INSIDE the project. That last part is the whole security model
- * of the write endpoint: a request names a file, and only a path that survives
- * this is ever opened.
+ * The scan's answer plus any overrides, resolved and checked to be inside the
+ * project. That check is the write endpoint's security model: a request names a
+ * file, and only a path that survives this is ever opened.
  */
 export function writableStyles(config) {
     const root = config.root
@@ -140,8 +125,7 @@ export function writableStyles(config) {
     const map = new Map()
     for (const rel of listed) {
         const abs = path.resolve(root, rel)
-        // `path.resolve` collapses `..`, so anything that escapes the project is
-        // visible here and refused rather than sanitised into something else.
+        // resolve() collapses `..`, so an escaping path is visible here.
         if (!abs.startsWith(path.resolve(root) + path.sep)) continue
         map.set(rel, abs)
     }
