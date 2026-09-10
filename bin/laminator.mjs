@@ -4,7 +4,7 @@
 // laminator scan     re-read the project after moving CSS around
 // laminator doctor   what it found, and what it could not
 
-import { promises as fs } from 'fs'
+import { promises as fs, default as fsSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { readConfig, scan, write } from '../src/scan/index.mjs'
@@ -12,6 +12,15 @@ import { serve } from '../src/server/index.mjs'
 import { installed } from '../src/server/launch.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
+
+/** The setup guide, as a path if it shipped with the package and a URL if this
+ *  is a checkout without it. Printing a path that does not exist is worse than
+ *  printing a link. */
+function setupDoc() {
+    const local = path.join(HERE, '..', 'SETUP.md')
+    try { fsSync.accessSync(local); return path.relative(process.cwd(), local) || 'SETUP.md' }
+    catch { return 'https://github.com/Alphapatil-26/Laminator/blob/main/SETUP.md' }
+}
 const args = process.argv.slice(2)
 const cmd = args.find((a) => !a.startsWith('-')) ?? 'serve'
 const flag = (name, fallback) => {
@@ -114,8 +123,9 @@ try {
         console.log(
             names.length
                 ? dim(`  Agents found on this machine: ${names.join(', ')}`)
-                : warn('  No agent CLI found — Send will still write the review file and copy the prompt.'),
+                : warn('  No agent CLI found. Send will still write the review file and copy the prompt.'),
         )
+        console.log(dim(`  Stuck on any of it: ${setupDoc()}`))
         console.log()
     } else if (cmd === 'scan') {
         const result = await doScan()
@@ -131,7 +141,15 @@ try {
         report(config)
         console.log(`\n  scanned at  ${config.scannedAt}`)
         console.log(`  agents      ${JSON.stringify(await installed())}`)
-        console.log(`  snippet     ${snippet(port)}\n`)
+        console.log(`  snippet     ${snippet(port)}`)
+        const styles = config.styles?.editable?.length ?? 0
+        if (!styles) {
+            console.log(warn('\n  No editable stylesheets, so every finding will say `utility` or `none`.'))
+            console.log(dim('  If that is wrong, list them under overrides.includeStyles and re-scan.'))
+        }
+        const seen = Object.entries(await installed()).filter(([, v]) => v).map(([k]) => k)
+        if (!seen.length) console.log(warn('\n  No agent CLI found. Send writes the file and copies the prompt.'))
+        console.log(dim(`\n  Setup and troubleshooting: ${setupDoc()}\n`))
     } else if (cmd === 'serve' || cmd === undefined) {
         let config = await readConfig(root)
         if (!config) {

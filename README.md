@@ -8,6 +8,7 @@
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
   <a href="#using-it">Usage</a> ·
+  <a href="SETUP.md">Setup &amp; troubleshooting</a> ·
   <a href="AGENTS.md">For your agent</a> ·
   <a href="https://alphapatil-26.github.io/Laminator/">Docs</a>
 </p>
@@ -235,6 +236,9 @@ laminator doctor    what it found, and what it could not
 ```
 
 ## Troubleshooting
+
+The short version is below. [SETUP.md](SETUP.md) is the long one, covering agent
+CLIs, dictation, ports and what to do when the scan finds nothing.
 
 **The toolbar does not appear.** Check the browser console for the `laminator`
 banner. No banner means the script tag did not load. Is `laminator` running, and
