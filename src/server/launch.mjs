@@ -26,15 +26,20 @@ const run = promisify(execFile)
  * `resume` is Claude Code's own idea. The others get no equivalent flag, since
  * a guessed one is an argument error at the terminal.
  *
- * TODO: codex and gemini have no model list. Neither CLI was installed when this
- * was written, and an invented model id looks authoritative in a dropdown and
- * then fails at the terminal. Read their --help and fill these in.
+ * Only Claude Code has a model list and an effort flag here. Neither codex nor
+ * gemini was installed to read one from, and an invented model id looks
+ * authoritative in a dropdown and then fails at the terminal, so they offer
+ * `default` alone and their Effort row is hidden rather than shown and ignored.
  */
 export const AGENTS = {
     claude: {
         label: 'Claude Code',
         command: 'claude',
         modelFlag: '--model',
+        // Verified against `claude --help`: aliases or full names.
+        models: ['default', 'opus', 'sonnet', 'haiku', 'fable'],
+        effortFlag: '--effort',
+        efforts: ['default', 'low', 'medium', 'high', 'xhigh', 'max'],
         supportsContinue: true,
         // Slash commands are a Claude Code feature: a file in `.claude/commands`.
         prompt: (file) => `/laminator-review ${file}`,
@@ -43,6 +48,8 @@ export const AGENTS = {
         label: 'OpenAI Codex',
         command: 'codex',
         modelFlag: '--model',
+        models: ['default'],
+        effortFlag: null,
         supportsContinue: false,
         // No slash commands, so it gets the same instructions by path.
         prompt: (file, cmdFile) => `Read ${cmdFile} and follow it exactly for the review file ${file}.`,
@@ -51,6 +58,8 @@ export const AGENTS = {
         label: 'Gemini CLI',
         command: 'gemini',
         modelFlag: '--model',
+        models: ['default'],
+        effortFlag: null,
         supportsContinue: false,
         prompt: (file, cmdFile) => `Read ${cmdFile} and follow it exactly for the review file ${file}.`,
     },
@@ -108,7 +117,33 @@ const flatten = (s) => String(s).replace(/["\r\n]+/g, ' ').replace(/\s+/g, ' ').
  * this runs, so a terminal that would not open should cost the handoff and
  * nothing else.
  */
-export async function launch(root, { file, agent = 'claude', model = '', target = 'new', commandFile }) {
+/**
+ * The flags a choice turns into.
+ *
+ * `default` contributes nothing, and that is the whole point. A pinned
+ * `~/.claude/settings.json` may say `"model": "opus[1m]"`; passing `--model
+ * opus` selects the plain alias instead and silently drops the 1M-context
+ * build. Emitting no flag lets the session inherit the settings file, including
+ * settings that change later without this code knowing.
+ *
+ * An effort asked of an agent with no effort flag is dropped rather than
+ * mapped onto something that looks similar.
+ */
+export function handoffFlags(agent, { model = '', effort = '', target = 'new' } = {}) {
+    const spec = AGENTS[agent]
+    if (!spec) return []
+    const flags = []
+    const known = spec.models || ['default']
+    if (model && model !== 'default' && known.includes(model)) flags.push(spec.modelFlag, model)
+    if (effort && effort !== 'default' && spec.effortFlag) flags.push(spec.effortFlag, effort)
+    if (spec.supportsContinue) {
+        if (target === 'continue') flags.push('--continue')
+        else if (target.startsWith('session:')) flags.push('--resume', target.slice(8))
+    }
+    return flags
+}
+
+export async function launch(root, { file, agent = 'claude', model = '', effort = '', target = 'new', commandFile }) {
     const spec = AGENTS[agent]
     if (!spec) return { ok: false, how: `unknown agent "${agent}"` }
     if (target === 'copy') return { ok: false, how: 'copy only — nothing opened, by request' }
@@ -120,12 +155,7 @@ export async function launch(root, { file, agent = 'claude', model = '', target 
         return { ok: false, how: `${spec.command} is not installed` }
     }
 
-    const flags = []
-    if (model && model !== 'default') flags.push(spec.modelFlag, model)
-    if (spec.supportsContinue) {
-        if (target === 'continue') flags.push('--continue')
-        else if (target.startsWith('session:')) flags.push('--resume', target.slice(8))
-    }
+    const flags = handoffFlags(agent, { model, effort, target })
     const text = flatten(spec.prompt(file, commandFile))
 
     try {

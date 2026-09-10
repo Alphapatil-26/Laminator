@@ -102,6 +102,15 @@ export async function serve(root, { port = 7317, quiet = false } = {}) {
                         port, token,
                         project: config.project,
                         surfaceRoot: config.overrides?.surfaceRoot || '',
+                        agents: Object.fromEntries(
+                            Object.entries(AGENTS).map(([id, s]) => [id, {
+                                label: s.label,
+                                supportsContinue: s.supportsContinue,
+                                models: s.models || ['default'],
+                                efforts: s.effortFlag ? s.efforts || [] : [],
+                            }]),
+                        ),
+                        installed: await installed(),
                     })};\n${clientSrc}`,
                 )
             }
@@ -118,7 +127,12 @@ export async function serve(root, { port = 7317, quiet = false } = {}) {
                     surfaceRoot: config.overrides?.surfaceRoot || '',
                     stats: config.stats,
                     agents: Object.fromEntries(
-                        Object.entries(AGENTS).map(([id, s]) => [id, { label: s.label, supportsContinue: s.supportsContinue }]),
+                        Object.entries(AGENTS).map(([id, s]) => [id, {
+                            label: s.label,
+                            supportsContinue: s.supportsContinue,
+                            models: s.models || ['default'],
+                            efforts: s.effortFlag ? s.efforts || [] : [],
+                        }]),
                     ),
                     installed: await installed(),
                 }, allow)
@@ -198,6 +212,7 @@ export async function serve(root, { port = 7317, quiet = false } = {}) {
                                       file,
                                       agent: b.agent ?? 'claude',
                                       model: b.model ?? '',
+                                      effort: b.effort ?? '',
                                       target: b.target ?? 'new',
                                       commandFile: '.laminator/review-ui.md',
                                   })

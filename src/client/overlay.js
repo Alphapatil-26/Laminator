@@ -32,10 +32,61 @@
     }
 
     const settings = Object.assign(
-        { agent: 'claude', target: 'new', model: 'default', brief: '' },
+        { agent: 'claude', target: 'new', model: 'default', effort: 'default', brief: '' },
         (() => { try { return JSON.parse(localStorage.getItem(KEY)) || {} } catch { return {} } })(),
     )
     const save = () => { try { localStorage.setItem(KEY, JSON.stringify(settings)) } catch {} }
+
+    /* ───────────────────────────── the icon set ─────────────────────────────
+     * Ported from the build this grew out of, where they were drawn to sit on
+     * one 24-unit grid at one stroke weight. A toolbar of words is readable
+     * once and then read every time; icons are learned once.
+     *
+     * currentColor throughout, so the active and hover states recolour them
+     * without a second copy of each glyph.
+     */
+    const svg = (body, size) =>
+        `<svg viewBox="0 0 24 24" width="${size || 16}" height="${size || 16}" fill="none" stroke="currentColor"` +
+        ` stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`
+
+    const I = {
+        cursor: svg('<path d="M5 3l6.5 16 2.2-6.3 6.3-2.2z"/>'),
+        text: svg('<path d="M5 6V4h14v2M12 4v16M9 20h6"/>'),
+        multi: svg('<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/>' +
+            '<path d="M13 6h8M17 3v6M3 15h8M7 13v6"/>'),
+        area: svg('<path d="M3 8V5.5A2.5 2.5 0 015.5 3H8M16 3h2.5A2.5 2.5 0 0121 5.5V8M21 16v2.5a2.5 2.5 0 01-2.5 2.5H16' +
+            'M8 21H5.5A2.5 2.5 0 013 18.5V16"/>'),
+        pause: svg('<path d="M9 4v16M15 4v16"/>'),
+        play: svg('<path d="M7 4l12 8-12 8z"/>'),
+        eye: svg('<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/>'),
+        eyeOff: svg('<path d="M3 3l18 18M10.6 6.1A9.6 9.6 0 0112 6c6.4 0 10 6 10 6a17 17 0 01-3.4 4M6.3 8.3A16.6 16.6 0 002 12' +
+            's3.6 6.5 10 6.5a10 10 0 003.6-.65"/>'),
+        trash: svg('<path d="M4 7h16M10 7V5h4v2M6 7l1 13h10l1-13M10 11v6M14 11v6"/>', 14),
+        edit: svg('<path d="M4 20h4l10-10a2.1 2.1 0 10-3-3L5 17v3z"/>', 14),
+        gear: svg('<path d="M7.878 5.214L7.175 5.052a2 2 0 00-1.65.473 2 2 0 00-.473 1.65l.162.703a2.4 2.4 0 01-.84 2.117' +
+            'l-.855.57A1.5 1.5 0 002.75 12c0 .578.289 1.118.77 1.438l.855.57a2.4 2.4 0 01.84 2.117l-.162.703a2 2 0 00.473 1.65' +
+            ' 2 2 0 001.65.473l.703-.162a2.4 2.4 0 012.114.84l.57.855a1.72 1.72 0 002.876 0l.57-.855a2.4 2.4 0 012.114-.84' +
+            'l.703.162a2 2 0 001.65-.473 2 2 0 00.473-1.65l-.162-.703a2.4 2.4 0 01.84-2.117l.855-.57c.481-.32.77-.86.77-1.438' +
+            's-.289-1.118-.77-1.438l-.855-.57a2.4 2.4 0 01-.84-2.117l.162-.703a2 2 0 00-.473-1.65 2 2 0 00-1.65-.473' +
+            'l-.703.162a2.4 2.4 0 01-2.114-.84l-.57-.855a1.72 1.72 0 00-2.876 0l-.57.855a2.4 2.4 0 01-2.114.84z"/>' +
+            '<circle cx="12" cy="12" r="2.75"/>'),
+        mic: svg('<path d="M12 3.5a2.5 2.5 0 012.5 2.5v6a2.5 2.5 0 01-5 0V6A2.5 2.5 0 0112 3.5z"/>' +
+            '<path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v2.5"/>', 15),
+        close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+        inspect: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>'),
+        chat: svg('<path d="M20 15a2 2 0 01-2 2H8l-4 4V6a2 2 0 012-2h12a2 2 0 012 2z"/>'),
+        send: svg('<path d="M4 12l16-8-6 16-2.5-6.2z"/>'),
+        shot: svg('<path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V8a1 1 0 011-1z"/>' +
+            '<circle cx="12" cy="12.5" r="3.2"/>'),
+        stats: svg('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
+    }
+
+    /** The mark, for the closed state. Tail lower left, an S through the middle,
+     *  head and forked tongue upper right. */
+    const MARK = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+        '<path d="M5 18.5c3.5 1.5 6-1 6-3.2 0-2.6-4.4-2.9-4.4-5.6C6.6 7.3 9 6 11.6 6h3.6" stroke="currentColor"' +
+        ' stroke-width="2.4" stroke-linecap="round"/><circle cx="16.4" cy="6" r="2.2" fill="currentColor"/>' +
+        '<path d="M18.5 5.6l2-.8m-2 1.9l2 .7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>'
 
     /* ─────────────────────────── describing the DOM ─────────────────────── */
 
@@ -298,7 +349,31 @@ button { border:0; background:transparent; color:#8e8e96; font:inherit; font-siz
 button:hover:not(:disabled) { background:#2a2a30; color:#f2f2f7; }
 button:disabled { opacity:.32; cursor:default; }
 button[data-on="1"] { background:#2f6df6; color:#fff; }
-.send { background:#2f6df6; color:#fff; font-weight:600; padding:0 14px; }
+/* Icon buttons are square so the row reads as a rank of glyphs rather than
+   words of uneven length. */
+.ic { width:34px; padding:0; display:inline-flex; align-items:center; justify-content:center; position:relative; }
+.ic svg { display:block; }
+.ic.sm { width:26px; height:26px; border-radius:7px; }
+/* A count rides on its own button: how many are selected, how many are open. */
+.cnt { position:absolute; top:2px; right:2px; min-width:14px; height:14px; padding:0 3px; border-radius:7px;
+  background:#2f6df6; color:#fff; font-size:9px; font-weight:700; font-style:normal; line-height:14px;
+  text-align:center; box-shadow:0 0 0 2px #1c1c1e; }
+button[data-on="1"] .cnt { background:#fff; color:#2f6df6; box-shadow:0 0 0 2px #2f6df6; }
+/* Where the handoff is going, without opening the panel to find out. */
+.chip { font-weight:600; color:#c8c8d0; background:#2a2a30; padding:0 11px; }
+.chip:hover { background:#34343c; }
+/* The closed state. Without it the toolbar can only be reached by keyboard. */
+.launch { position:fixed; right:16px; bottom:16px; width:44px; height:44px; padding:0; border-radius:15px;
+  display:flex; align-items:center; justify-content:center; pointer-events:auto;
+  border:1px solid #33333b; background:#1c1c1e; color:#9a9aa4;
+  box-shadow:0 8px 26px rgb(0 0 0/42%); transition:color .18s, background .18s, transform .18s; }
+.launch:hover { color:#f2f2f7; background:#26262c; transform:translateY(-1px); }
+.launch svg { display:block; }
+@media (prefers-reduced-motion: reduce) { .launch { transition:none; } }
+
+.send { background:#2f6df6; color:#fff; font-weight:600; padding:0 12px 0 10px;
+  display:inline-flex; align-items:center; gap:6px; }
+.send svg { display:block; }
 .send:hover:not(:disabled) { background:#4680ff; }
 .send:disabled { background:#2a2a30; color:#6c6c76; }
 .div { width:1px; height:20px; margin:0 4px; background:#35353d; flex:none; }
@@ -448,11 +523,38 @@ select option { background:#1c1c1e; color:#f2f2f7; }
     /* ────────────────────────────── render ─────────────────────────────── */
 
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
-    const MODES = [['element', 'Pick'], ['text', 'Text'], ['multi', 'Multi'], ['area', 'Area']]
+    const MODES = [
+        ['element', 'Pick', 'cursor'],
+        ['text', 'Text', 'text'],
+        ['multi', 'Multi', 'multi'],
+        ['area', 'Area', 'area'],
+    ]
+
+    /** The toolbar chip. Claude is the default agent, so naming it adds
+     *  nothing: "Opus · high" can only be Claude. The other two are always
+     *  named, because a handoff going somewhere you did not expect is the
+     *  mistake this label exists to prevent. */
+    function handoffLabel() {
+        const spec = (CFG.agents || {})[settings.agent] || {}
+        const parts = []
+        if (settings.agent !== 'claude') parts.push(spec.label || settings.agent)
+        parts.push(settings.model && settings.model !== 'default'
+            ? settings.model[0].toUpperCase() + settings.model.slice(1) : 'Default')
+        if (settings.effort && settings.effort !== 'default' && (spec.efforts || []).length) parts.push(settings.effort)
+        return parts.join(' · ')
+    }
     const kb = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB')
 
     function render() {
-        if (!open) { ui.innerHTML = ''; return }
+        if (!open) {
+            // Closed used to mean an empty overlay, which left the keyboard as
+            // the only way back in.
+            ui.innerHTML = `<button class="launch" id="launch" title="Laminator (Ctrl/Cmd+Shift+F)"
+                aria-label="Open Laminator">${MARK}</button>`
+            const b = sr.getElementById('launch')
+            if (b) b.onclick = () => { open = true; render() }
+            return
+        }
         const rule = draft && draft.rec.laminator.rule
         ui.innerHTML =
             (hover && mode && !draft ? `<div class="hi" style="left:${hover.left}px;top:${hover.top}px;width:${hover.width}px;height:${hover.height}px"></div>` : '') +
@@ -470,17 +572,17 @@ select option { background:#1c1c1e; color:#f2f2f7; }
             (panel === 'stats' ? statsPanel() : '') +
             (draft ? popup(rule) : '') +
             `<div class="bar">
-  ${MODES.map(([id, label]) => `<button data-mode="${id}" data-on="${mode === id ? 1 : 0}" title="${label} (${id[0].toUpperCase()})">${label}${id === 'multi' && picked.length ? ' ' + picked.length : ''}</button>`).join('')}
+  ${MODES.map(([id, label, ic]) => `<button class="ic" data-mode="${id}" data-on="${mode === id ? 1 : 0}" title="${label} (${id[0].toUpperCase()})" aria-label="${label}">${I[ic]}${id === 'multi' && picked.length ? `<i class="cnt">${picked.length}</i>` : ''}</button>`).join('')}
   <span class="div"></span>
-  <button id="pause" data-on="${paused ? 1 : 0}" title="Freeze animations (P)">Freeze</button>
-  <button id="shots" data-on="${shots ? 1 : 0}" title="Attach a screenshot to each finding. Chrome asks once — pick THIS TAB.">Shots</button>
+  <button class="ic" id="pause" data-on="${paused ? 1 : 0}" title="${paused ? 'Resume animations (P)' : 'Freeze animations (P)'}" aria-label="Freeze animations">${paused ? I.play : I.pause}</button>
+  <button class="ic" id="shots" data-on="${shots ? 1 : 0}" title="Attach a screenshot to each finding. Chrome asks once: pick this tab." aria-label="Screenshots">${I.shot}</button>
   <span class="div"></span>
-  <button id="q" data-on="${panel === 'queue' ? 1 : 0}">Comments${openCount() ? ' ' + openCount() : ''}</button>
-  <button id="stats" data-on="${panel === 'stats' ? 1 : 0}">Saved</button>
-  <button id="setup" data-on="${panel === 'setup' ? 1 : 0}">Setup</button>
+  <button class="ic" id="q" data-on="${panel === 'queue' ? 1 : 0}" title="Comments" aria-label="Comments">${I.chat}${openCount() ? `<i class="cnt">${openCount()}</i>` : ''}</button>
+  <button class="ic" id="stats" data-on="${panel === 'stats' ? 1 : 0}" title="What this has saved" aria-label="Saved">${I.stats}</button>
   <span class="div"></span>
-  <button class="send" id="send" ${openCount() ? '' : 'disabled'}>Send${openCount() ? ' ' + openCount() : ''}</button>
-  <button id="close" title="Close (Esc)">×</button>
+  <button class="chip" id="setup" data-on="${panel === 'setup' ? 1 : 0}" title="Hand off to">${esc(handoffLabel())}</button>
+  <button class="send" id="send" ${openCount() ? '' : 'disabled'}>${I.send}<span>Send${openCount() ? ' ' + openCount() : ''}</span></button>
+  <button class="ic" id="close" title="Close (Esc)" aria-label="Close">${I.close}</button>
 </div>`
         wire()
         if (draft) {
@@ -502,7 +604,7 @@ select option { background:#1c1c1e; color:#f2f2f7; }
     ${rec.selectedText ? `<q>${esc(rec.selectedText)}</q>` : ''}
     <div class="wrap">
       <textarea id="c" placeholder="What is wrong here?"></textarea>
-      ${speechOK() ? `<button class="mic" id="mic" data-on="${listening ? 1 : 0}" title="Dictate. Chrome sends the audio to Google's speech service.">${listening ? '■' : '●'}</button>` : ''}
+      ${speechOK() ? `<button class="mic" id="mic" data-on="${listening ? 1 : 0}" title="Dictate. Chrome sends the audio to Google's speech service.">${I.mic}</button>` : ''}
     </div>
     ${listening ? `<p class="heard"><span class="dot"></span>${esc(heard || 'Listening…')}</p>` : ''}
     <span class="lbl">Intent</span>
@@ -517,8 +619,14 @@ select option { background:#1c1c1e; color:#f2f2f7; }
 </div>`
     }
 
+    /** This agent's models and efforts. An agent with no effort flag has an
+     *  empty list, and the row is hidden rather than shown and ignored. */
+    const agentSpec = () => (CFG.agents || {})[settings.agent] || { models: ['default'], efforts: [] }
+
     const setupPanel = () => `<div class="panel">
-  <div class="row"><span>Agent</span><select id="agent">${Object.keys(CFG.agents || { claude: 1 }).map((a) => `<option value="${a}"${settings.agent === a ? ' selected' : ''}>${a}</option>`).join('')}</select></div>
+  <div class="row"><span>Agent</span><select id="agent">${Object.entries(CFG.agents || { claude: { label: 'Claude Code' } }).map(([a, s]) => `<option value="${a}"${settings.agent === a ? ' selected' : ''}>${esc(s.label || a)}${CFG.installed && CFG.installed[a] === false ? ' (not installed)' : ''}</option>`).join('')}</select></div>
+  ${(agentSpec().models || ['default']).length > 1 ? `<div class="row"><span>Model</span><select id="model">${(agentSpec().models || []).map((m) => `<option value="${m}"${settings.model === m ? ' selected' : ''}>${m === 'default' ? 'Default' : m[0].toUpperCase() + m.slice(1)}</option>`).join('')}</select></div>` : ''}
+  ${(agentSpec().efforts || []).length ? `<div class="row"><span>Effort</span><select id="effort">${agentSpec().efforts.map((e) => `<option value="${e}"${settings.effort === e ? ' selected' : ''}>${e}</option>`).join('')}</select></div>` : ''}
   <div class="row"><span>Open in</span><select id="target">
     <option value="new"${settings.target === 'new' ? ' selected' : ''}>New chat</option>
     <option value="continue"${settings.target === 'continue' ? ' selected' : ''}>Continue last</option>
@@ -530,13 +638,16 @@ select option { background:#1c1c1e; color:#f2f2f7; }
             : settings.target !== 'new'
                 ? '<p class="note">Opens a <b>new window</b> carrying that conversation. Nothing can type into a terminal that is already running.</p>'
                 : ''}
+  ${settings.model === 'default' && settings.effort === 'default'
+            ? '<p class="note">Default passes no flag, so the session inherits whatever the settings file for that agent pins. Pick a model here only to override that.</p>'
+            : ''}
   <span class="lbl">Brief for the review chat</span>
   <textarea id="brief" rows="3" placeholder="What a new chat cannot know: what you're mid-way through, what not to touch.">${esc(settings.brief)}</textarea>
 </div>`
 
     const queuePanel = () => `<div class="panel">
   ${list.length
-            ? list.map((a, i) => `<div class="item" data-status="${a.status}"><span class="n">${i + 1}</span><span style="flex:1;min-width:0">${esc(a.comment)}<i>${esc(a.elementPath.split(' > ').pop())}${a.laminator && a.laminator.rule ? ` · ${esc(a.laminator.rule.file)}:${a.laminator.rule.line}` : ''}${a.status === 'resolved' ? ' · resolved' : ''}</i></span><button data-edit="${a.id}" title="Edit">&#9998;</button><button data-del="${a.id}" title="Delete">×</button></div>`).join('')
+            ? list.map((a, i) => `<div class="item" data-status="${a.status}"><span class="n">${i + 1}</span><span style="flex:1;min-width:0">${esc(a.comment)}<i>${esc(a.elementPath.split(' > ').pop())}${a.laminator && a.laminator.rule ? ` · ${esc(a.laminator.rule.file)}:${a.laminator.rule.line}` : ''}${a.status === 'resolved' ? ' · resolved' : ''}</i></span><button class="ic sm" data-edit="${a.id}" title="Edit" aria-label="Edit">${I.edit}</button><button class="ic sm" data-del="${a.id}" title="Delete" aria-label="Delete">${I.trash}</button></div>`).join('')
             : '<p class="note">Nothing yet. Pick a mode and click something.</p>'}
 </div>`
 
@@ -592,7 +703,17 @@ select option { background:#1c1c1e; color:#f2f2f7; }
             panel = panel === 'setup' ? null : 'setup'; render()
             if (panel === 'setup') { try { sessions = (await api('/sessions')).sessions || [] } catch {} ; render() }
         })
-        on('#agent', 'change', (e) => { settings.agent = e.target.value; save() })
+        on('#agent', 'change', (e) => {
+            settings.agent = e.target.value
+            // A model is only valid for the agent it belongs to. Carrying
+            // `opus` across to the gemini CLI is a typo that reaches a terminal.
+            const spec = agentSpec()
+            if (!(spec.models || ['default']).includes(settings.model)) settings.model = 'default'
+            if (!(spec.efforts || []).includes(settings.effort)) settings.effort = 'default'
+            save(); render()
+        })
+        on('#model', 'change', (e) => { settings.model = e.target.value; save(); render() })
+        on('#effort', 'change', (e) => { settings.effort = e.target.value; save(); render() })
         on('#target', 'change', (e) => { settings.target = e.target.value; save(); render() })
         on('#brief', 'input', (e) => { settings.brief = e.target.value; save() })
         on('[data-del]', 'click', async (e) => { await api('/queue', { action: 'delete', id: e.currentTarget.dataset.del }); pull() })
@@ -684,7 +805,7 @@ select option { background:#1c1c1e; color:#f2f2f7; }
     async function send() {
         const j = await api('/queue', {
             action: 'export', agent: settings.agent, target: settings.target,
-            model: settings.model, brief: settings.brief,
+            model: settings.model, effort: settings.effort, brief: settings.brief,
         })
         if (j.error) return say(j.error)
         try { await navigator.clipboard.writeText(`Read ${j.file} and follow .laminator/review-ui.md`) } catch {}
@@ -794,6 +915,11 @@ select option { background:#1c1c1e; color:#f2f2f7; }
     // Polled, because the agent working the queue writes to it too. This is
     // what makes a pin go grey while you watch instead of after a reload.
     setInterval(() => { if (open) pull() }, 3000)
+
+    // Draw once on mount, which is what puts the launcher on screen. Nothing
+    // called render() until the first keypress, so the closed state was an
+    // empty overlay and the shortcut was the only way in.
+    render()
 
     console.log('%c laminator %c ' + CFG.project.name + ' — Ctrl/Cmd+Shift+F',
         'background:#2f6df6;color:#fff;border-radius:3px', '')
