@@ -88,6 +88,39 @@ export async function installed() {
 
 /** Live conversations `--resume` could be handed to. Not memoised, because a
  *  stale list offers a session that has already ended. */
+/**
+ * Whether `--continue` has anything to continue in this folder.
+ *
+ * Claude Code keys stored conversations by cwd, under
+ * `~/.claude/projects/<cwd with every non-alphanumeric turned into a dash>`.
+ * Offering Continue last where that folder is empty produces a window that
+ * prints "No conversation found to continue" and closes, which reads as the
+ * handoff being broken.
+ *
+ * `sessions()` cannot answer this: it lists LIVE interactive sessions, not
+ * history.
+ *
+ * Unknown is treated as yes. If this encoding ever changes, the cost of
+ * guessing wrong should be an option that fails loudly, not one that is
+ * missing with no explanation.
+ */
+export async function canContinue(cwd) {
+    const home = process.env.USERPROFILE || process.env.HOME
+    if (!home) return true
+    const root = path.join(home, '.claude', 'projects')
+    let entries
+    try { entries = await fs.readdir(root) } catch { return true }
+
+    const want = path.resolve(cwd).replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()
+    // Windows spells the drive letter either way depending on how cwd reached
+    // us, and the directory keeps whichever was used.
+    const dir = entries.find((e) => e.toLowerCase() === want)
+    if (!dir) return false
+    try {
+        return (await fs.readdir(path.join(root, dir))).some((f) => f.endsWith('.jsonl'))
+    } catch { return false }
+}
+
 export async function sessions(cwd) {
     try {
         const { stdout } = await run('claude', ['agents', '--json'], {

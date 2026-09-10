@@ -22,7 +22,7 @@ import { fileURLToPath } from 'url'
 import { readConfig } from '../scan/index.mjs'
 import { candidates, edit } from './rules.mjs'
 import { writableStyles } from '../scan/index.mjs'
-import { AGENTS, installed, launch, sessions } from './launch.mjs'
+import { AGENTS, canContinue, installed, launch, sessions } from './launch.mjs'
 import * as store from './store.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -111,6 +111,7 @@ export async function serve(root, { port = 7317, quiet = false } = {}) {
                             }]),
                         ),
                         installed: await installed(),
+                        canContinue: await canContinue(root),
                     })};\n${clientSrc}`,
                 )
             }
@@ -135,6 +136,7 @@ export async function serve(root, { port = 7317, quiet = false } = {}) {
                         }]),
                     ),
                     installed: await installed(),
+                    canContinue: await canContinue(root),
                 }, allow)
             }
 

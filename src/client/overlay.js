@@ -724,7 +724,10 @@ select option { background:#1c1c1e; color:#f2f2f7; }
   ${settings.target === 'copy'
             ? '<p class="note">Nothing opens. The prompt goes to your clipboard for the terminal you already have.</p>'
             : settings.target !== 'new'
-                ? '<p class="note">Opens a <b>new window</b> carrying that conversation. Nothing can type into a terminal that is already running.</p>'
+                ? `<p class="note">Opens a <b>new window</b> carrying that conversation. Nothing can type into a terminal that is already running.${
+                    settings.target === 'continue' && CFG.canContinue === false
+                        ? ' <b>There is no conversation in this folder yet</b>, so this will open and immediately say so. Claude Code keeps history per folder, and laminator opens it in your project root.'
+                        : ''}</p>`
                 : ''}
   ${settings.model === 'default' && settings.effort === 'default'
             ? '<p class="note">Default passes no flag, so the session inherits whatever the settings file for that agent pins. Pick a model here only to override that.</p>'
