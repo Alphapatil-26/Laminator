@@ -4,7 +4,7 @@
     "description": "Point at anything in your running app and hand a coding agent the file:line that paints it. Entirely local, zero dependencies.",
     "type": "module",
     "bin": {
-        "laminator": "./bin/laminator.mjs"
+        "laminator": "bin/laminator.mjs"
     },
     "exports": {
         ".": "./src/index.mjs",
