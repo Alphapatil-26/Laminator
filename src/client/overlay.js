@@ -234,6 +234,49 @@
     const terse = () => settings.detail === 'brief'
     const PINS = ['#a855f7', '#2f6df6', '#06b6d4', '#22c55e', '#eab308', '#f97316', '#ef4444']
 
+    /* ─────────────────────────────── inspect ────────────────────────────
+     * Distances between the anchored element and whatever is under the
+     * cursor. Every line is axis-aligned, which is what lets this be plain
+     * divs instead of an SVG.
+     *
+     *   nested   the four insets between inner and outer edges, which reads
+     *            as the effective padding and is the usual question
+     *   apart    the gap between nearest edges per axis, drawn at the middle
+     *            of where the two boxes overlap on the other axis
+     *
+     * Overlapping but not nested draws nothing: there is no one honest number
+     * for that, and inventing one is worse than saying nothing.
+     */
+    function measureBetween(a, b) {
+        const lines = []
+        const px = (n) => String(Math.round(n))
+        const holds = (o, i) => i.left >= o.left && i.right <= o.right && i.top >= o.top && i.bottom <= o.bottom
+
+        if (holds(a, b) || holds(b, a)) {
+            const [o, i] = holds(a, b) ? [a, b] : [b, a]
+            const cx = i.left + i.width / 2
+            const cy = i.top + i.height / 2
+            lines.push({ x1: cx, y1: o.top, x2: cx, y2: i.top, label: px(i.top - o.top) })
+            lines.push({ x1: cx, y1: i.bottom, x2: cx, y2: o.bottom, label: px(o.bottom - i.bottom) })
+            lines.push({ x1: o.left, y1: cy, x2: i.left, y2: cy, label: px(i.left - o.left) })
+            lines.push({ x1: i.right, y1: cy, x2: o.right, y2: cy, label: px(o.right - i.right) })
+            return lines
+        }
+        if (b.left >= a.right || a.left >= b.right) {
+            const [l, r] = b.left >= a.right ? [a, b] : [b, a]
+            const t = Math.max(a.top, b.top), bm = Math.min(a.bottom, b.bottom)
+            const y = bm > t ? (t + bm) / 2 : (a.top + a.height / 2 + b.top + b.height / 2) / 2
+            lines.push({ x1: l.right, y1: y, x2: r.left, y2: y, label: px(r.left - l.right) })
+        }
+        if (b.top >= a.bottom || a.top >= b.bottom) {
+            const [t, bm] = b.top >= a.bottom ? [a, b] : [b, a]
+            const l = Math.max(a.left, b.left), r = Math.min(a.right, b.right)
+            const x = r > l ? (l + r) / 2 : (a.left + a.width / 2 + b.left + b.width / 2) / 2
+            lines.push({ x1: x, y1: t.bottom, x2: x, y2: bm.top, label: px(bm.top - t.bottom) })
+        }
+        return lines
+    }
+
     /* ───────────────────────────── screenshots ──────────────────────────── */
     /* Real pixels of the real tab. A headless re-render would photograph a
      * login page for any signed-in route and miss the open menu, the hover
@@ -432,6 +475,22 @@ textarea:focus-visible { outline:2px solid #2f6df6; border-color:transparent; }
   place-items:center; cursor:pointer; pointer-events:auto; box-shadow:0 2px 8px rgb(0 0 0/40%); padding:0; }
 .marker[data-status="resolved"], .marker[data-status="dismissed"] { background:#52525b; opacity:.6; }
 .marker[data-multi="1"] { border-radius:6px; }
+/* The anchored element's edges, run across the viewport. One solid red
+   hairline: no dash, no glow, no outline. A guide should be the thinnest mark
+   that can still be seen, so it never competes with the layout it measures.
+   Red because blue is hover and orange is picked, and because it is what a
+   designer already reads as an alignment guide.
+   No transform: a fractional offset on a 1px line antialiases into a 2px
+   smudge, which is the heaviness this is avoiding. */
+.guide { position:fixed; background:#ff3b5c; pointer-events:none; }
+.guide[data-axis="h"] { left:0; right:0; height:1px; }
+.guide[data-axis="v"] { top:0; bottom:0; width:1px; }
+.mline { position:fixed; background:#ff3b5c; pointer-events:none; }
+.mlabel { position:fixed; pointer-events:none; padding:1px 5px; background:#ff3b5c; color:#fff;
+  border-radius:4px; font:600 10px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-variant-numeric:tabular-nums; }
+.hi[data-kind="anchor"] { outline:2px solid #ff3b5c; background:rgb(255 59 92/8%); }
+
 /* A switch. The travel is the whole affordance, so it is the one thing here
    that animates. */
 .tog { width:38px; height:22px; padding:0; border-radius:11px; background:#3a3a42; position:relative;
@@ -485,6 +544,8 @@ select option { background:#1c1c1e; color:#f2f2f7; }
     // Deliberately not persisted. A hide that survived a reload would leave no
     // way back except clearing localStorage by hand.
     let hidden = false
+    // Inspect anchors one element, then measures from it to whatever you hover.
+    let anchor = null
     let toast = null, toastAt = 0, hover = null, intent = null, severity = null
     let sessions = [], picked = [], rubber = null, dragFrom = null
     let shots = false, listening = false, heard = '', paused = false, savings = null
@@ -550,7 +611,7 @@ select option { background:#1c1c1e; color:#f2f2f7; }
                 y: Math.min(rect.y + rect.height + 8, innerHeight - 380),
             },
         }
-        mode = null; hover = null; picked = []; rubber = null
+        mode = null; hover = null; picked = []; rubber = null; anchor = null
         render()
     }
 
@@ -588,6 +649,7 @@ select option { background:#1c1c1e; color:#f2f2f7; }
         ['text', 'Text', 'text'],
         ['multi', 'Multi', 'multi'],
         ['area', 'Area', 'area'],
+        ['inspect', 'Inspect', 'inspect'],
     ]
 
     /** The toolbar chip. Claude is the default agent, so naming it adds
@@ -619,6 +681,7 @@ select option { background:#1c1c1e; color:#f2f2f7; }
         const rule = draft && draft.rec.laminator.rule
         ui.innerHTML =
             (settings.blockClicks ? '<div class="block"></div>' : '') +
+            inspectLayer() +
             (hover && mode && !draft ? `<div class="hi" style="left:${hover.left}px;top:${hover.top}px;width:${hover.width}px;height:${hover.height}px"></div>` : '') +
             picked.map((el) => { const b = el.getBoundingClientRect(); return `<div class="hi" data-kind="picked" style="left:${b.left}px;top:${b.top}px;width:${b.width}px;height:${b.height}px"></div>` }).join('') +
             (rubber ? `<div class="rubber" style="left:${rubber.x}px;top:${rubber.y}px;width:${rubber.width}px;height:${rubber.height}px"></div>` : '') +
@@ -653,6 +716,35 @@ select option { background:#1c1c1e; color:#f2f2f7; }
             const t = sr.getElementById('c')
             if (t && sr.activeElement !== t) { t.value = draft.text || ''; t.focus() }
         }
+    }
+
+    /** The anchored element's four edges run across the whole viewport, so a
+     *  shared alignment shows up as the other elements the line passes
+     *  through. One solid red hairline, the thinnest mark that still reads. */
+    function inspectLayer() {
+        if (mode !== 'inspect') return ''
+        const a = anchor && anchor.isConnected ? anchor.getBoundingClientRect() : null
+        if (!a) return ''
+        let out = ['top', 'bottom'].map((e) => `<div class="guide" data-axis="h" style="top:${Math.round(a[e])}px"></div>`).join('')
+            + ['left', 'right'].map((e) => `<div class="guide" data-axis="v" style="left:${Math.round(a[e])}px"></div>`).join('')
+        out += `<div class="hi" data-kind="anchor" style="left:${a.left}px;top:${a.top}px;width:${a.width}px;height:${a.height}px"></div>`
+
+        const h = hover && hover.el && hover.el !== anchor && hover.el.isConnected ? hover.el.getBoundingClientRect() : null
+        if (h) {
+            for (const l of measureBetween(a, h)) {
+                const flat = l.y1 === l.y2
+                const top = flat ? l.y1 : Math.min(l.y1, l.y2)
+                const left = flat ? Math.min(l.x1, l.x2) : l.x1
+                const w = flat ? Math.abs(l.x2 - l.x1) : 1
+                const ht = flat ? 1 : Math.abs(l.y2 - l.y1)
+                if (w < 1 && ht < 1) continue
+                out += `<div class="mline" style="top:${top}px;left:${left}px;width:${w}px;height:${ht}px"></div>`
+                out += flat
+                    ? `<div class="mlabel" style="top:${l.y1 - 20}px;left:${(l.x1 + l.x2) / 2 - 12}px">${l.label}</div>`
+                    : `<div class="mlabel" style="top:${(l.y1 + l.y2) / 2 - 8}px;left:${l.x1 + 6}px">${l.label}</div>`
+            }
+        }
+        return out
     }
 
     function popup(rule) {
@@ -777,7 +869,7 @@ select option { background:#1c1c1e; color:#f2f2f7; }
             const m = e.currentTarget.dataset.mode
             // Clicking Multi while in Multi is the same "done" gesture as M.
             if (m === 'multi' && mode === 'multi') return finishMulti()
-            mode = mode === m ? null : m; hover = null; picked = []; render()
+            mode = mode === m ? null : m; hover = null; picked = []; anchor = null; render()
         })
         on('#close', 'click', () => { open = false; mode = null; render() })
         on('#pause', 'click', () => { paused = !paused; applyFreeze(); render() })
@@ -945,6 +1037,7 @@ select option { background:#1c1c1e; color:#f2f2f7; }
             if (draft) { draft = null; popPos = null; intent = severity = null }
             // In multi, Escape clears the selection first and the mode second,
             // so one keypress cannot throw away six careful clicks.
+            else if (mode === 'inspect' && anchor) anchor = null
             else if (mode === 'multi' && picked.length) picked = []
             else if (mode) mode = null
             else if (panel) panel = null
@@ -966,16 +1059,22 @@ select option { background:#1c1c1e; color:#f2f2f7; }
         const t = e.target
         if (!(t instanceof Element) || OURS(t)) { if (hover) { hover = null; render() } return }
         const b = t.getBoundingClientRect()
-        hover = { left: b.left, top: b.top, width: b.width, height: b.height }
+        hover = { left: b.left, top: b.top, width: b.width, height: b.height, el: t }
         render()
     }, true)
 
     addEventListener('click', async (e) => {
         if (!open || draft) return
-        if (mode !== 'element' && mode !== 'multi') return
+        if (mode !== 'element' && mode !== 'multi' && mode !== 'inspect') return
         const t = e.target
         if (!(t instanceof Element) || OURS(t)) return
         e.preventDefault(); e.stopPropagation()
+        if (mode === 'inspect') {
+            // Clicking the anchor again releases it, so one key is not the only
+            // way out of the mode.
+            anchor = anchor === t ? null : t
+            return render()
+        }
         if (mode === 'multi') {
             picked = picked.indexOf(t) >= 0 ? picked.filter((x) => x !== t) : picked.concat([t])
             return render()

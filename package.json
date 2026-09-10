@@ -1,6 +1,6 @@
 {
     "name": "laminator",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Point at anything in your running app and hand a coding agent the file:line that paints it. Entirely local, zero dependencies.",
     "type": "module",
     "bin": {
