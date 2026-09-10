@@ -4,7 +4,33 @@
 // the session just runs as a different model than the toolbar claimed.
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { handoffFlags } from '../src/server/launch.mjs'
+import { AGENTS, handoffFlags } from '../src/server/launch.mjs'
+
+describe('the prompt a terminal is opened on', () => {
+    // `laminator init` only installs the slash command where the project
+    // already has a `.claude/` directory. Sending `/laminator-review` anyway
+    // opens a terminal that answers "Unknown command" and nothing else.
+    // To break it: make claude's prompt ignore its third argument.
+    const FILE = '.laminator/review-2026-01-01.md'
+    const CMD = '.laminator/review-ui.md'
+
+    test('uses the slash command when one was installed', () => {
+        assert.equal(AGENTS.claude.prompt(FILE, CMD, true), `/laminator-review ${FILE}`)
+    })
+
+    test('falls back to the path when one was not', () => {
+        const p = AGENTS.claude.prompt(FILE, CMD, false)
+        assert.ok(!p.startsWith('/'), `still a slash command: ${p}`)
+        assert.ok(p.includes(CMD) && p.includes(FILE), p)
+    })
+
+    test('the other agents never get a slash command', () => {
+        for (const id of ['codex', 'gemini']) {
+            const p = AGENTS[id].prompt(FILE, CMD, true)
+            assert.ok(!p.startsWith('/'), `${id}: ${p}`)
+        }
+    })
+})
 
 describe('handoffFlags()', () => {
     // The one that matters. A pinned settings.json may say "opus[1m]", and
@@ -47,5 +73,43 @@ describe('handoffFlags()', () => {
 
     test('an unknown agent asks for nothing', () => {
         assert.deepEqual(handoffFlags('nope', { model: 'opus' }), [])
+    })
+
+    // These values are attacker-reachable: any local process can POST an
+    // export, and a page on a localhost origin can read the token from
+    // /client.js and then do the same. On Windows they land inside a .cmd
+    // file and on macOS inside a shell script, both of which read `&` as
+    // syntax. Allowlisted rather than escaped, so there is nothing to quote.
+    //
+    // To break it: drop `(spec.efforts || []).includes(effort)`, or the
+    // /^[A-Za-z0-9_-]{1,64}$/ test on the session id.
+    describe('values that reach a command line', () => {
+        // Stated as what is allowed rather than what is banned. A blocklist
+        // of metacharacters is one forgotten character away from useless.
+        const SAFE = /^[\w.:=-]+$/
+
+        for (const [why, opts] of [
+            ['effort with a chained command', { effort: 'high & calc.exe' }],
+            ['effort breaking out of quotes', { effort: 'high" & calc.exe & "' }],
+            ['a session id with a command', { target: 'session:abc & calc.exe' }],
+            ['a session id breaking out', { target: 'session:a" && calc.exe && "' }],
+            ['a model with a command', { model: 'opus & calc.exe' }],
+        ]) {
+            test(why + ' is dropped', () => {
+                for (const f of handoffFlags('claude', opts)) {
+                    assert.ok(SAFE.test(f), `unsafe value reached argv: ${JSON.stringify(f)}`)
+                }
+            })
+        }
+
+        // The guard above is worthless if it also rejects the real values.
+        test('but the real values still get through', () => {
+            assert.deepEqual(handoffFlags('claude', { effort: 'max' }), ['--effort', 'max'])
+            assert.deepEqual(handoffFlags('claude', { model: 'haiku' }), ['--model', 'haiku'])
+            assert.deepEqual(
+                handoffFlags('claude', { target: 'session:06ff5f66-15b6-4e7e-be61-b1aeb8cee815' }),
+                ['--resume', '06ff5f66-15b6-4e7e-be61-b1aeb8cee815'],
+            )
+        })
     })
 })

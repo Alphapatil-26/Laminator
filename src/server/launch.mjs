@@ -42,7 +42,14 @@ export const AGENTS = {
         efforts: ['default', 'low', 'medium', 'high', 'xhigh', 'max'],
         supportsContinue: true,
         // Slash commands are a Claude Code feature: a file in `.claude/commands`.
-        prompt: (file) => `/laminator-review ${file}`,
+        // `laminator init` only writes one when the project already has a
+        // `.claude/` directory, so on a project without one the fallback is the
+        // same path-based instruction the other agents get. Sending
+        // `/laminator-review` regardless produces "Unknown command" in a fresh
+        // terminal, which reads as the tool being broken.
+        prompt: (file, cmdFile, hasSlash) => (hasSlash
+            ? `/laminator-review ${file}`
+            : `Read ${cmdFile} and follow it exactly for the review file ${file}.`),
     },
     codex: {
         label: 'OpenAI Codex',
@@ -141,7 +148,20 @@ export async function sessions(cwd) {
     }
 }
 
+/** Whether `laminator init` was able to install the slash command here. */
+async function hasSlashCommand(root) {
+    try {
+        await fs.access(path.join(root, '.claude', 'commands', 'laminator-review.md'))
+        return true
+    } catch { return false }
+}
+
 const flatten = (s) => String(s).replace(/["\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()
+
+/** Single-quote for /bin/sh. The only character that matters inside single
+ *  quotes is the single quote itself, which has to be closed, escaped and
+ *  reopened. */
+const shq = (s) => `'${String(s).replace(/'/g, `'\''`)}'`
 
 /**
  * Open an agent on this review file.
@@ -166,12 +186,24 @@ export function handoffFlags(agent, { model = '', effort = '', target = 'new' } 
     const spec = AGENTS[agent]
     if (!spec) return []
     const flags = []
-    const known = spec.models || ['default']
-    if (model && model !== 'default' && known.includes(model)) flags.push(spec.modelFlag, model)
-    if (effort && effort !== 'default' && spec.effortFlag) flags.push(spec.effortFlag, effort)
+    // Everything here is allowlisted rather than escaped. On Windows these end
+    // up inside a .cmd file and on macOS inside a script, both of which read
+    // `&` and `|` as syntax; a value that cannot contain them cannot be quoted
+    // wrongly later. `model` was already checked this way. `effort` and the
+    // session id were not, and `--effort "high & calc.exe"` was a real hole.
+    if (model && model !== 'default' && (spec.models || ['default']).includes(model)) {
+        flags.push(spec.modelFlag, model)
+    }
+    if (effort && effort !== 'default' && spec.effortFlag && (spec.efforts || []).includes(effort)) {
+        flags.push(spec.effortFlag, effort)
+    }
     if (spec.supportsContinue) {
         if (target === 'continue') flags.push('--continue')
-        else if (target.startsWith('session:')) flags.push('--resume', target.slice(8))
+        else if (target.startsWith('session:')) {
+            const id = target.slice(8)
+            // Claude Code session ids are uuids. Anything else is not one.
+            if (/^[A-Za-z0-9_-]{1,64}$/.test(id)) flags.push('--resume', id)
+        }
     }
     return flags
 }
@@ -189,7 +221,7 @@ export async function launch(root, { file, agent = 'claude', model = '', effort 
     }
 
     const flags = handoffFlags(agent, { model, effort, target })
-    const text = flatten(spec.prompt(file, commandFile))
+    const text = flatten(spec.prompt(file, commandFile, await hasSlashCommand(root)))
 
     try {
         if (process.platform === 'win32') {
@@ -217,11 +249,22 @@ export async function launch(root, { file, agent = 'claude', model = '', effort 
         }
 
         if (process.platform === 'darwin') {
-            const inner = [spec.command, ...flags, JSON.stringify(text)].join(' ')
-            spawn('osascript', ['-e', `tell application "Terminal" to do script "cd ${JSON.stringify(root)} && ${inner}"`], {
+            // Write the script, then tell Terminal to run that one path. The
+            // previous version pasted the command, its flags and the prompt
+            // into a `do script "..."` string, where a quote in any of them
+            // escaped into AppleScript and then into the shell.
+            const script = path.join(root, '.laminator', 'launch-review.sh')
+            await fs.mkdir(path.dirname(script), { recursive: true })
+            await fs.writeFile(
+                script,
+                ['#!/bin/sh', `cd ${shq(root)} || exit 1`, `exec ${[spec.command, ...flags, text].map(shq).join(' ')}`, ''].join('\n'),
+                'utf8',
+            )
+            await fs.chmod(script, 0o755)
+            spawn('osascript', ['-e', `tell application "Terminal" to do script ${JSON.stringify(script)}`], {
                 detached: true, stdio: 'ignore',
             }).unref()
-            return { ok: true, how: 'Terminal.app' }
+            return { ok: true, how: 'Terminal.app', script: '.laminator/launch-review.sh' }
         }
 
         // Linux has no single answer for "open a terminal". Try the Debian
