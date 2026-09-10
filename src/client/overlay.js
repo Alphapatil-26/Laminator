@@ -32,7 +32,11 @@
     }
 
     const settings = Object.assign(
-        { agent: 'claude', target: 'new', model: 'default', effort: 'default', brief: '' },
+        {
+            agent: 'claude', target: 'new', model: 'default', effort: 'default', brief: '',
+            detail: 'detailed', react: true, notify: false, clearOnSend: false,
+            blockClicks: false, pin: '#2f6df6',
+        },
         (() => { try { return JSON.parse(localStorage.getItem(KEY)) || {} } catch { return {} } })(),
     )
     const save = () => { try { localStorage.setItem(KEY, JSON.stringify(settings)) } catch {} }
@@ -210,19 +214,25 @@
             y: Math.round(r.top + scrollY),
             boundingBox: { x: Math.round(r.left), y: Math.round(r.top + scrollY), width: Math.round(r.width), height: Math.round(r.height) },
             cssClasses: [...el.classList].join(' ') || null,
-            computedStyles: STYLE_PROPS.map((p) => `${p}: ${cs.getPropertyValue(p)}`).join('; '),
-            nearbyText: (el.textContent || '').trim().slice(0, 120) || null,
-            reactComponents: reactChain(el),
+            // Brief keeps the anchor and the box and drops the rest. On a
+            // batch of twenty findings the computed styles are most of the
+            // file, and an agent that already has file:line rarely reads them.
+            computedStyles: terse() ? undefined : STYLE_PROPS.map((p) => `${p}: ${cs.getPropertyValue(p)}`).join('; '),
+            nearbyText: terse() ? undefined : (el.textContent || '').trim().slice(0, 120) || null,
+            reactComponents: settings.react ? reactChain(el) : undefined,
             laminator: {
                 rule,
                 styling: rule ? 'rule' : utility ? 'utility' : 'none',
                 viewport: { w: innerWidth, h: innerHeight },
                 theme: document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-                misaligned: mis.length ? mis : undefined,
+                misaligned: terse() || !mis.length ? undefined : mis,
                 paused: paused || undefined,
             },
         }, extra)
     }
+
+    const terse = () => settings.detail === 'brief'
+    const PINS = ['#a855f7', '#2f6df6', '#06b6d4', '#22c55e', '#eab308', '#f97316', '#ef4444']
 
     /* ───────────────────────────── screenshots ──────────────────────────── */
     /* Real pixels of the real tab. A headless re-render would photograph a
@@ -418,10 +428,32 @@ textarea:focus-visible { outline:2px solid #2f6df6; border-color:transparent; }
   color:#f2f2f7; font:inherit; font-size:11px; font-family:ui-monospace,Menlo,Consolas,monospace; }
 .decl input:focus-visible { outline:2px solid #2f6df6; border-color:transparent; }
 .marker { position:fixed; width:20px; height:20px; transform:translate(-50%,-50%); border:2px solid #fff;
-  border-radius:50%; background:#2f6df6; color:#fff; font-size:10.5px; font-weight:700; display:grid;
+  border-radius:50%; background:var(--pin,#2f6df6); color:#fff; font-size:10.5px; font-weight:700; display:grid;
   place-items:center; cursor:pointer; pointer-events:auto; box-shadow:0 2px 8px rgb(0 0 0/40%); padding:0; }
 .marker[data-status="resolved"], .marker[data-status="dismissed"] { background:#52525b; opacity:.6; }
 .marker[data-multi="1"] { border-radius:6px; }
+/* A switch. The travel is the whole affordance, so it is the one thing here
+   that animates. */
+.tog { width:38px; height:22px; padding:0; border-radius:11px; background:#3a3a42; position:relative;
+  flex:0 0 auto; transition:background .18s; }
+.tog i { position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#c8c8d0;
+  transition:transform .18s, background .18s; }
+.tog[data-on="1"] { background:#2f6df6; }
+.tog[data-on="1"] i { transform:translateX(16px); background:#fff; }
+.tog:hover { background:#45454f; }
+.tog[data-on="1"]:hover { background:#4680ff; }
+@media (prefers-reduced-motion: reduce) { .tog, .tog i { transition:none; } }
+/* The second line of a switch label: what it does, not what it is called. */
+.sub { display:block; font-style:normal; font-size:10.5px; color:#75757f; margin-top:2px; line-height:1.35; }
+
+/* Swallows clicks on the page so a hover menu stays open while you annotate
+   it. Below the toolbar, above everything of yours. */
+.block { position:fixed; inset:0; pointer-events:auto; background:transparent; z-index:1; }
+.phead { display:flex; align-items:center; justify-content:space-between; margin:-2px 0 8px; }
+.phead b { font-size:12px; color:#f2f2f7; letter-spacing:.01em; }
+.swatch { display:flex; gap:6px; margin:4px 0 10px; }
+.swatch button { width:22px; height:22px; border-radius:50%; padding:0; border:2px solid transparent; }
+.swatch button[data-on="1"] { border-color:#f2f2f7; }
 .panel { position:fixed; right:16px; bottom:72px; width:328px; max-height:62vh; overflow:auto; padding:12px;
   border-radius:16px; border:1px solid #33333b; background:#1c1c1e; color:#e6e6ea; pointer-events:auto;
   box-shadow:0 16px 44px rgb(0 0 0/55%); font-size:12px; }
@@ -450,6 +482,9 @@ select option { background:#1c1c1e; color:#f2f2f7; }
     /* ────────────────────────────── state ──────────────────────────────── */
 
     let open = false, mode = null, draft = null, list = [], panel = null
+    // Deliberately not persisted. A hide that survived a reload would leave no
+    // way back except clearing localStorage by hand.
+    let hidden = false
     let toast = null, toastAt = 0, hover = null, intent = null, severity = null
     let sessions = [], picked = [], rubber = null, dragFrom = null
     let shots = false, listening = false, heard = '', paused = false, savings = null
@@ -460,10 +495,35 @@ select option { background:#1c1c1e; color:#f2f2f7; }
         toast = t; toastAt = Date.now(); render()
         setTimeout(() => { if (Date.now() - toastAt >= ms - 50) { toast = null; render() } }, ms)
     }
-    const openCount = () => list.filter((a) => a.status !== 'resolved' && a.status !== 'dismissed').length
+    const isOpen = (a) => a.status !== 'resolved' && a.status !== 'dismissed'
+    const openCount = () => list.filter(isOpen).length
 
     async function pull() {
-        try { const j = await api('/queue'); list = j.annotations || []; render() } catch {}
+        try {
+            const j = await api('/queue')
+            const was = new Map(list.map((a) => [a.id, a.status]))
+            const next = j.annotations || []
+            // The transition is the event. Comparing against the previous poll
+            // rather than the current state is what stops it announcing the
+            // same finding every three seconds.
+            const done = next.filter((a) => was.has(a.id) && was.get(a.id) !== a.status
+                && (a.status === 'resolved' || a.status === 'dismissed'))
+            list = next
+            if (done.length) notifyDone(done)
+            render()
+        } catch {}
+    }
+
+    function notifyDone(done) {
+        if (!settings.notify || !('Notification' in window) || Notification.permission !== 'granted') return
+        const left = list.filter(isOpen).length
+        const first = done[0]
+        try {
+            new Notification(done.length === 1 ? `${first.status}: ${first.comment.slice(0, 60)}` : `${done.length} findings closed`, {
+                body: left ? `${left} still open` : 'The queue is empty.',
+                tag: 'laminator-queue',
+            })
+        } catch {}
     }
 
     /* ────────────────────────── drafting ───────────────────────────────── */
@@ -546,6 +606,7 @@ select option { background:#1c1c1e; color:#f2f2f7; }
     const kb = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB')
 
     function render() {
+        if (hidden) { ui.innerHTML = ''; return }
         if (!open) {
             // Closed used to mean an empty overlay, which left the keyboard as
             // the only way back in.
@@ -557,6 +618,7 @@ select option { background:#1c1c1e; color:#f2f2f7; }
         }
         const rule = draft && draft.rec.laminator.rule
         ui.innerHTML =
+            (settings.blockClicks ? '<div class="block"></div>' : '') +
             (hover && mode && !draft ? `<div class="hi" style="left:${hover.left}px;top:${hover.top}px;width:${hover.width}px;height:${hover.height}px"></div>` : '') +
             picked.map((el) => { const b = el.getBoundingClientRect(); return `<div class="hi" data-kind="picked" style="left:${b.left}px;top:${b.top}px;width:${b.width}px;height:${b.height}px"></div>` }).join('') +
             (rubber ? `<div class="rubber" style="left:${rubber.x}px;top:${rubber.y}px;width:${rubber.width}px;height:${rubber.height}px"></div>` : '') +
@@ -568,6 +630,7 @@ select option { background:#1c1c1e; color:#f2f2f7; }
             }).join('') +
             (toast ? `<div class="toast">${esc(toast)}</div>` : '') +
             (panel === 'setup' ? setupPanel() : '') +
+            (panel === 'settings' ? settingsPanel() : '') +
             (panel === 'queue' && !draft ? queuePanel() : '') +
             (panel === 'stats' ? statsPanel() : '') +
             (draft ? popup(rule) : '') +
@@ -582,6 +645,7 @@ select option { background:#1c1c1e; color:#f2f2f7; }
   <span class="div"></span>
   <button class="chip" id="setup" data-on="${panel === 'setup' ? 1 : 0}" title="Hand off to">${esc(handoffLabel())}</button>
   <button class="send" id="send" ${openCount() ? '' : 'disabled'}>${I.send}<span>Send${openCount() ? ' ' + openCount() : ''}</span></button>
+  <button class="ic" id="gear" data-on="${panel === 'settings' ? 1 : 0}" title="Settings" aria-label="Settings">${I.gear}</button>
   <button class="ic" id="close" title="Close (Esc)" aria-label="Close">${I.close}</button>
 </div>`
         wire()
@@ -623,7 +687,31 @@ select option { background:#1c1c1e; color:#f2f2f7; }
      *  empty list, and the row is hidden rather than shown and ignored. */
     const agentSpec = () => (CFG.agents || {})[settings.agent] || { models: ['default'], efforts: [] }
 
+    const sw = (id, label, on, note) => `<div class="row"><span>${label}${note ? `<i class="sub">${note}</i>` : ''}</span>` +
+        `<button class="tog" data-sw="${id}" data-on="${on ? 1 : 0}" role="switch" aria-checked="${!!on}" aria-label="${label}"><i></i></button></div>`
+
+    const settingsPanel = () => `<div class="panel">
+  <div class="phead"><b>Settings</b><button class="ic sm" id="pclose" title="Close" aria-label="Close">${I.close}</button></div>
+  <div class="row"><span>Output detail</span><select id="detail">
+    <option value="detailed"${settings.detail === 'detailed' ? ' selected' : ''}>Detailed</option>
+    <option value="brief"${settings.detail === 'brief' ? ' selected' : ''}>Brief</option>
+  </select></div>
+  <p class="note">${settings.detail === 'brief'
+            ? 'Anchor, box and rule only. Smaller batches, and the agent reads the file for the rest.'
+            : 'Full context: computed styles, nearby text, and any neighbours that nearly line up.'}</p>
+  ${sw('react', 'React components', settings.react, 'names from the fiber, when there is one')}
+  ${sw('shots', 'Screenshots', shots, 'Chrome asks once, pick this tab')}
+  ${sw('notify', 'Notify when done', settings.notify, 'a desktop alert as findings resolve')}
+  ${sw('blockClicks', 'Block page interactions', settings.blockClicks, 'hold a hover menu open while you annotate it')}
+  ${sw('clearOnSend', 'Clear after Send', settings.clearOnSend, 'empty the queue once it is handed over')}
+  <span class="lbl">Marker colour</span>
+  <div class="swatch">${PINS.map((c) => `<button data-pin="${c}" data-on="${settings.pin === c ? 1 : 0}" style="background:${c}" title="${c}" aria-label="Marker ${c}"></button>`).join('')}</div>
+  <div class="row"><span>Hide until reload</span><button id="hideit">Hide</button></div>
+  <p class="note">Takes the toolbar and every pin off the screen for a clean look at the page. Reload brings it back and nothing is lost.</p>
+</div>`
+
     const setupPanel = () => `<div class="panel">
+  <div class="phead"><b>Hand off to</b><button class="ic sm" id="pclose" title="Close" aria-label="Close">${I.close}</button></div>
   <div class="row"><span>Agent</span><select id="agent">${Object.entries(CFG.agents || { claude: { label: 'Claude Code' } }).map(([a, s]) => `<option value="${a}"${settings.agent === a ? ' selected' : ''}>${esc(s.label || a)}${CFG.installed && CFG.installed[a] === false ? ' (not installed)' : ''}</option>`).join('')}</select></div>
   ${(agentSpec().models || ['default']).length > 1 ? `<div class="row"><span>Model</span><select id="model">${(agentSpec().models || []).map((m) => `<option value="${m}"${settings.model === m ? ' selected' : ''}>${m === 'default' ? 'Default' : m[0].toUpperCase() + m.slice(1)}</option>`).join('')}</select></div>` : ''}
   ${(agentSpec().efforts || []).length ? `<div class="row"><span>Effort</span><select id="effort">${agentSpec().efforts.map((e) => `<option value="${e}"${settings.effort === e ? ' selected' : ''}>${e}</option>`).join('')}</select></div>` : ''}
@@ -646,12 +734,14 @@ select option { background:#1c1c1e; color:#f2f2f7; }
 </div>`
 
     const queuePanel = () => `<div class="panel">
+  <div class="phead"><b>Comments</b><button class="ic sm" id="pclose" title="Close" aria-label="Close">${I.close}</button></div>
   ${list.length
             ? list.map((a, i) => `<div class="item" data-status="${a.status}"><span class="n">${i + 1}</span><span style="flex:1;min-width:0">${esc(a.comment)}<i>${esc(a.elementPath.split(' > ').pop())}${a.laminator && a.laminator.rule ? ` · ${esc(a.laminator.rule.file)}:${a.laminator.rule.line}` : ''}${a.status === 'resolved' ? ' · resolved' : ''}</i></span><button class="ic sm" data-edit="${a.id}" title="Edit" aria-label="Edit">${I.edit}</button><button class="ic sm" data-del="${a.id}" title="Delete" aria-label="Delete">${I.trash}</button></div>`).join('')
             : '<p class="note">Nothing yet. Pick a mode and click something.</p>'}
 </div>`
 
     const statsPanel = () => `<div class="panel">
+  <div class="phead"><b>What this has saved</b><button class="ic sm" id="pclose" title="Close" aria-label="Close">${I.close}</button></div>
   ${savings && savings.batches ? `
     <div class="row"><span>Reading avoided</span><b>${kb(savings.avoidedBytes)}</b></div>
     <div class="row"><span>Review files cost</span><b>${kb(savings.suppliedBytes)}</b></div>
@@ -689,10 +779,7 @@ select option { background:#1c1c1e; color:#f2f2f7; }
         on('#close', 'click', () => { open = false; mode = null; render() })
         on('#pause', 'click', () => { paused = !paused; applyFreeze(); render() })
         on('#shots', 'click', async () => {
-            if (shots) { stopShots(); shots = false; render(); return say('Screenshots off') }
-            const r = await enableShots()
-            if (!r.ok) { render(); return say(`Screenshots off — ${r.why}`, 5000) }
-            shots = true; render(); say('Screenshots on — findings will carry a picture')
+            await toggleShots()
         })
         on('#q', 'click', () => { panel = panel === 'queue' ? null : 'queue'; render() })
         on('#stats', 'click', async () => {
@@ -702,6 +789,27 @@ select option { background:#1c1c1e; color:#f2f2f7; }
         on('#setup', 'click', async () => {
             panel = panel === 'setup' ? null : 'setup'; render()
             if (panel === 'setup') { try { sessions = (await api('/sessions')).sessions || [] } catch {} ; render() }
+        })
+        on('#gear', 'click', () => { panel = panel === 'settings' ? null : 'settings'; render() })
+        on('#pclose', 'click', () => { panel = null; render() })
+        on('#detail', 'change', (e) => { settings.detail = e.target.value; save(); render() })
+        on('#hideit', 'click', () => { hidden = true; panel = null; render() })
+        on('[data-pin]', 'click', (e) => {
+            settings.pin = e.currentTarget.dataset.pin; save(); applyPin(); render()
+        })
+        on('[data-sw]', 'click', async (e) => {
+            const k = e.currentTarget.dataset.sw
+            if (k === 'shots') return toggleShots()
+            settings[k] = !settings[k]
+            // Asking for permission at the moment the switch is flipped is the
+            // only point the request is obviously connected to something asked for.
+            if (k === 'notify' && settings[k] && 'Notification' in window && Notification.permission === 'default') {
+                try { await Notification.requestPermission() } catch {}
+            }
+            if (k === 'notify' && settings[k] && 'Notification' in window && Notification.permission === 'denied') {
+                say('Notifications are blocked for this site, so nothing will appear.', 6000)
+            }
+            save(); render()
         })
         on('#agent', 'change', (e) => {
             settings.agent = e.target.value
@@ -802,6 +910,13 @@ select option { background:#1c1c1e; color:#f2f2f7; }
         say(hadShot ? 'Added, with a screenshot' : 'Added')
     }
 
+    async function toggleShots() {
+        if (shots) { stopShots(); shots = false; render(); return say('Screenshots off') }
+        const r = await enableShots()
+        if (!r.ok) { render(); return say(`Screenshots off, ${r.why}`, 5000) }
+        shots = true; render(); say('Screenshots on. Findings will carry a picture.')
+    }
+
     async function send() {
         const j = await api('/queue', {
             action: 'export', agent: settings.agent, target: settings.target,
@@ -811,7 +926,9 @@ select option { background:#1c1c1e; color:#f2f2f7; }
         try { await navigator.clipboard.writeText(`Read ${j.file} and follow .laminator/review-ui.md`) } catch {}
         say(j.launch && j.launch.ok
             ? `${j.count} handed to ${settings.agent}`
-            : `Wrote ${j.file} — prompt copied (${(j.launch && j.launch.how) || 'nothing opened'})`, 7000)
+            : `Wrote ${j.file}, prompt copied (${(j.launch && j.launch.how) || 'nothing opened'})`, 7000)
+        // The review file is already written, so the queue has done its job.
+        if (settings.clearOnSend) { await api('/queue', { action: 'clear' }); pull() }
     }
 
     /* ────────────────────────────── input ──────────────────────────────── */
@@ -908,6 +1025,8 @@ select option { background:#1c1c1e; color:#f2f2f7; }
         await beginDraft(containerFor(area), { area, members: inside(area), mode: 'area' })
     }, true)
 
+    const applyPin = () => host.style.setProperty('--pin', settings.pin || '#2f6df6')
+
     const reflow = () => { if (open) render() }
     addEventListener('scroll', reflow, true)
     addEventListener('resize', reflow)
@@ -915,6 +1034,8 @@ select option { background:#1c1c1e; color:#f2f2f7; }
     // Polled, because the agent working the queue writes to it too. This is
     // what makes a pin go grey while you watch instead of after a reload.
     setInterval(() => { if (open) pull() }, 3000)
+
+    applyPin()
 
     // Draw once on mount, which is what puts the launcher on screen. Nothing
     // called render() until the first keypress, so the closed state was an
